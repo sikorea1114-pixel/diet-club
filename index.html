@@ -232,6 +232,16 @@ function fmtDateHeader(s) {
   const [y,mo,da] = s.split("-").map(Number);
   return mo + "월 " + da + "일 (" + WEEK[new Date(y,mo-1,da).getDay()] + ")";
 }
+
+function getWeekStart(d) {
+  const end = new Date(d);
+  end.setHours(23,59,59,999);
+  const start = new Date(end);
+  start.setDate(end.getDate() - 6);
+  start.setHours(0,0,0,0);
+  return { start, end };
+}
+
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function colorOf(name) {
   const i = members.findIndex(m => m.name === name);
@@ -307,7 +317,16 @@ function render() {
   });
 
   const isMonth = mode === "month";
-  const totalKcal = (isMonth ? monthEntries : shown).reduce((s,e) => s + e.calories, 0);
+  const isWeek = mode === "week";
+
+  const weekRange = getWeekStart(date);
+  const weekEntries = entries.filter(e => {
+    const d = new Date(e.timestamp);
+    return d >= weekRange.start && d <= weekRange.end &&
+      (view === "all" || e.member === view);
+  }).sort((a,b)=>b.timestamp-a.timestamp);
+
+  const totalKcal = (isMonth ? monthEntries : (isWeek ? weekEntries : shown)).reduce((s,e) => s + e.calories, 0);
   const monthAvg = monthGroups.length ? Math.round(totalKcal / monthGroups.length) : 0;
   const perMember = members.map(m => ({
     name: m.name,
@@ -378,6 +397,21 @@ function render() {
       g.items.forEach(e => html += entryCard(e));
       html += '</div></div>';
     });
+  } else if (isWeek) {
+    if (weekEntries.length === 0) {
+      html += '<div class="empty">최근 7일 기록이 없어요.</div>';
+    } else {
+      const grouped = {};
+      weekEntries.forEach(e => {
+        if (!grouped[e.member]) grouped[e.member] = [];
+        grouped[e.member].push(e);
+      });
+      Object.keys(grouped).forEach(name => {
+        html += '<div class="group"><div class="ghead"><b>' + esc(name) + '</b><span>' + grouped[name].length + '개 기록</span></div><div class="col tight">';
+        grouped[name].forEach(e => html += entryCard(e));
+        html += '</div></div>';
+      });
+    }
   } else if (shown.length === 0) {
     html += '<div class="empty">아직 기록이 없어요.<br>아래 + 버튼으로 먹은 걸 적어보세요.</div>';
   } else {
@@ -420,11 +454,11 @@ function openAdd() {
     '<div class="phead"><h2>먹은 거 적기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
     mp +
     '<label class="flabel">식사 구분</label>' +
-    '<select class="ti" id="meal-select">' +
-    '<option value="아침">🌅 아침</option>' +
-    '<option value="점심">☀️ 점심</option>' +
-    '<option value="저녁">🌙 저녁</option>' +
-    '</select>' +
+    '<div class="mpick noscroll">' +
+    '<button onclick="pickMealType(\'아침\')">🌅 아침</button>' +
+    '<button onclick="pickMealType(\'점심\')">☀️ 점심</button>' +
+    '<button onclick="pickMealType(\'저녁\')">🌙 저녁</button>' +
+    '</div>' +
     '<label class="flabel">먹은 음식</label>' +
     '<textarea class="ti" id="f-food" rows="4" style="resize:none" placeholder="계란 2개&#10;바나나&#10;샐러드"></textarea>' +
     '<label class="flabel" style="margin-top:16px">칼로리</label>' +
@@ -467,8 +501,6 @@ function submitAdd() {
   if (!food) return;
   const raw = parseInt(document.getElementById("f-kcal").value, 10);
   const kcal = isNaN(raw) || raw < 0 ? 0 : raw;
-  const sel = document.getElementById("meal-select");
-  mealTypeSel = sel ? sel.value : "아침";
   addEntry(addMemberSel, food, kcal);
   closeModal();
 }
