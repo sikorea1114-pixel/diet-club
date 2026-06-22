@@ -194,7 +194,7 @@ const MEMBER_COLORS = ["#FF8A65","#4FC3F7","#BA68C8","#FFB74D","#4DB6AC","#F0629
 const WEEK = ["일","월","화","수","목","금","토"];
 
 // 상태
-let DB_URL = "";
+let DB_URL = "https://diet-cae5a-default-rtdb.firebaseio.com";
 let members = [];
 let entries = [];
 let date = new Date();
@@ -210,7 +210,7 @@ let pollTimer = null;
     DB_URL = decodeURIComponent(hash[1]).replace(/\/+$/, "");
     try { localStorage.setItem("dietclub_db", DB_URL); } catch (e) {}
   } else {
-    try { DB_URL = localStorage.getItem("dietclub_db") || ""; } catch (e) { DB_URL = ""; }
+    try { DB_URL = localStorage.getItem("dietclub_db") || "https://diet-cae5a-default-rtdb.firebaseio.com"; } catch (e) { DB_URL = "https://diet-cae5a-default-rtdb.firebaseio.com"; }
   }
 })();
 
