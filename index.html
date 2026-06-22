@@ -243,11 +243,6 @@ function getWeekRange(baseDate) {
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-function avatarOf(name) {
-  if (name === "이성호") return "🐻";
-  return name.slice(0,1);
-}
-
 function colorOf(name) {
   const i = members.findIndex(m => m.name === name);
   return i >= 0 ? MEMBER_COLORS[i % MEMBER_COLORS.length] : "#C7C6BD";
@@ -383,7 +378,7 @@ function render() {
   html += '<button class="chip ' + (view==="all"?"on":"") + '" onclick="setView(\'all\')">전체</button>';
   members.forEach(m => {
     html += '<button class="chip ' + (view===m.name?"on":"") + '" onclick="setView(\'' + esc(m.name).replace(/'/g,"\\'") + '\')">' +
-      '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + '</button>;
+      '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + '</button>';
   });
   html += '<button class="chip add" onclick="openMember()">' + iconPlus(15) + ' 멤버</button>';
   html += '</div>';
@@ -404,21 +399,34 @@ function render() {
   } else if (isWeek) {
     if (weekEntries.length === 0) {
       html += '<div class="empty">최근 7일 기록이 없어요.</div>';
-    } else if (view === "all") {
-      const grouped = {};
-      weekEntries.forEach(e => {
-        if (!grouped[e.member]) grouped[e.member] = [];
-        grouped[e.member].push(e);
-      });
-      Object.keys(grouped).forEach(name => {
-        html += '<div class="group"><div class="ghead"><b>' + esc(name) + '</b><span>' + grouped[name].length + '개 기록</span></div><div class="col tight">';
-        grouped[name].forEach(e => html += entryCard(e));
-        html += '</div></div>';
-      });
     } else {
-      html += '<div class="col">';
-      weekEntries.forEach(e => html += entryCard(e));
-      html += '</div>';
+      const dayMap = {};
+      weekEntries.forEach(e => {
+        if (!dayMap[e.date]) dayMap[e.date] = {};
+        if (!dayMap[e.date][e.member]) dayMap[e.date][e.member] = [];
+        dayMap[e.date][e.member].push(e);
+      });
+
+      const dates = Object.keys(dayMap).sort();
+
+      dates.forEach(d => {
+        html += '<div class="group">';
+        html += '<div class="ghead"><b>' + fmtDateHeader(d) + '</b><span>' +
+          Object.values(dayMap[d]).reduce((s,a)=>s+a.length,0) +
+          '개 기록</span></div>';
+
+        Object.keys(dayMap[d]).forEach(name => {
+          html += '<div class="group" style="margin-bottom:10px">';
+          html += '<div class="ghead"><b>' + esc(name) + '</b></div>';
+          html += '<div class="col tight">';
+          dayMap[d][name]
+            .sort((a,b)=>a.timestamp-b.timestamp)
+            .forEach(e => html += entryCard(e));
+          html += '</div></div>';
+        });
+
+        html += '</div>';
+      });
     }
   } else if (shown.length === 0) {
     html += '<div class="empty">아직 기록이 없어요.<br>아래 + 버튼으로 먹은 걸 적어보세요.</div>';
@@ -452,7 +460,7 @@ function render() {
 function entryCard(e) {
   const c = colorOf(e.member);
   return '<div class="entry">' +
-    '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(avatarOf(e.member)) + '</span>' +
+    '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(e.member.slice(0,1)) + '</span>' +
     '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum">' + e.calories.toLocaleString() + '<small> kcal</small></span>' +
     '<button class="del" onclick="removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
