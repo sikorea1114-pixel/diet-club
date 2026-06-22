@@ -456,9 +456,9 @@ function pickMealType(type) {
   mealTypeSel = type;
   document.querySelectorAll('[data-meal]').forEach(b => {
     const on = b.getAttribute('data-meal') === type;
-    b.style.borderColor = on ? 'var(--accent)' : 'var(--line)';
-    b.style.background = on ? 'var(--accent-soft)' : 'var(--surface)';
-    b.style.color = on ? 'var(--ink)' : 'var(--muted)';
+    b.style.borderColor = on ? 'var(--accent)' : '';
+    b.style.background = on ? 'var(--accent-soft)' : '';
+    b.style.color = on ? 'var(--ink)' : '';
   });
 }
 
