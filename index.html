@@ -420,11 +420,11 @@ function openAdd() {
     '<div class="phead"><h2>먹은 거 적기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
     mp +
     '<label class="flabel">식사 구분</label>' +
-    '<div class="mpick noscroll">' +
-    '<button onclick="pickMealType(\'아침\')">🌅 아침</button>' +
-    '<button onclick="pickMealType(\'점심\')">☀️ 점심</button>' +
-    '<button onclick="pickMealType(\'저녁\')">🌙 저녁</button>' +
-    '</div>' +
+    '<select class="ti" id="meal-select">' +
+    '<option value="아침">🌅 아침</option>' +
+    '<option value="점심">☀️ 점심</option>' +
+    '<option value="저녁">🌙 저녁</option>' +
+    '</select>' +
     '<label class="flabel">먹은 음식</label>' +
     '<textarea class="ti" id="f-food" rows="4" style="resize:none" placeholder="계란 2개&#10;바나나&#10;샐러드"></textarea>' +
     '<label class="flabel" style="margin-top:16px">칼로리</label>' +
@@ -467,6 +467,8 @@ function submitAdd() {
   if (!food) return;
   const raw = parseInt(document.getElementById("f-kcal").value, 10);
   const kcal = isNaN(raw) || raw < 0 ? 0 : raw;
+  const sel = document.getElementById("meal-select");
+  mealTypeSel = sel ? sel.value : "아침";
   addEntry(addMemberSel, food, kcal);
   closeModal();
 }
