@@ -340,7 +340,7 @@ function render() {
 
   // 헤더
   html += '<header><div class="toprow">';
-  html += '<div class="brand">' + iconUsers() + '<span>우리 다이어트 모임</span></div>';
+  html += '<div class="brand">' + iconUsers() + '<span> 다이어트 모임</span></div>';
   html += '<div class="toggle">' +
     '<button class="' + (mode==="day"?"on":"") + '" onclick="setMode(\'day\')">일별</button>' +
     '<button class="' + (mode==="week"?"on":"") + '" onclick="setMode(\'week\')">주간</button>' +
@@ -584,7 +584,7 @@ function closeModal(e) {
 function renderSetup() {
   document.getElementById("app").innerHTML =
     '<div class="setup">' +
-    '<div class="logo">' + iconUsers() + '<span style="font-weight:700;font-size:14px">우리 다이어트 모임</span></div>' +
+    '<div class="logo">' + iconUsers() + '<span style="font-weight:700;font-size:14px"> 다이어트 모임</span></div>' +
     '<h1>모임 서버 한 번만 연결하기</h1>' +
     '<p>모임원 모두가 같은 기록을 보려면 무료 데이터베이스(Firebase) 주소가 필요해요. 한 명(보통 모임장)이 한 번만 만들면 됩니다.</p>' +
     '<ol>' +
