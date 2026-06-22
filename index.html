@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>다이어트 모임</title>
+<title> 다이어트 모임</title>
 <style>
   :root {
     --bg: #F7F6F2; --surface: #FFFFFF; --ink: #1C1C19; --muted: #9B9B92;
@@ -475,7 +475,6 @@ function openAdd() {
   const upd = () => { document.getElementById("f-save").disabled = !food.value.trim(); };
   food.addEventListener("input", upd);
   kcal.addEventListener("input", () => kcal.value = kcal.value.replace(/[^0-9]/g, ""));
-  food.addEventListener("keydown", e => { if (e.key === "Enter") kcal.focus(); });
   kcal.addEventListener("keydown", e => { if (e.key === "Enter") submitAdd(); });
   upd();
   pickMealType('아침');
