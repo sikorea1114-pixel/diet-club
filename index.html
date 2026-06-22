@@ -418,9 +418,22 @@ function render() {
   } else if (shown.length === 0) {
     html += '<div class="empty">아직 기록이 없어요.<br>아래 + 버튼으로 먹은 걸 적어보세요.</div>';
   } else {
-    html += '<div class="col">';
-    shown.forEach(e => html += entryCard(e));
-    html += '</div>';
+    const meals = [
+      { key:'아침', icon:'🌅' },
+      { key:'점심', icon:'☀️' },
+      { key:'저녁', icon:'🌙' }
+    ];
+
+    meals.forEach(m => {
+      const rows = shown.filter(e => (e.mealType || '아침') === m.key);
+      if (!rows.length) return;
+
+      html += '<div class="group">';
+      html += '<div class="ghead"><b>' + m.icon + ' ' + m.key + '</b><span>' + rows.length + '개 기록</span></div>';
+      html += '<div class="col tight">';
+      rows.forEach(e => html += entryCard(e));
+      html += '</div></div>';
+    });
   }
   html += '</div></div>';
 
