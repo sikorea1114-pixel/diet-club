@@ -248,6 +248,12 @@ function colorOf(name) {
   return i >= 0 ? MEMBER_COLORS[i % MEMBER_COLORS.length] : "#C7C6BD";
 }
 
+function avatarOf(name) {
+  if (name === "이성호") return "🐻";
+  return name.slice(0,1);
+}
+
+
 // ── DB (Firebase Realtime Database REST) ──
 async function dbGet(path) {
   const r = await fetch(DB_URL + "/" + path + ".json");
@@ -460,7 +466,7 @@ function render() {
 function entryCard(e) {
   const c = colorOf(e.member);
   return '<div class="entry">' +
-    '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(e.member.slice(0,1)) + '</span>' +
+    '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(avatarOf(e.member)) + '</span>' +
     '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum">' + e.calories.toLocaleString() + '<small> kcal</small></span>' +
     '<button class="del" onclick="removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
