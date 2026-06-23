@@ -923,7 +923,7 @@ function renderNoticeHtml() {
       html += '<div class="card" style="margin:0 0 14px">';
       html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
         '<div style="font-size:16px;font-weight:800;flex:1;margin-right:8px">' + esc(notice.title) + '</div>' +
-        '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' +
+        (view === "이성호" ? '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' : '') +
         '</div>';
       if (notice.content) {
         html += '<div style="font-size:14px;color:var(--ink);line-height:1.6;margin-bottom:10px;white-space:pre-wrap">' + esc(notice.content) + '</div>';
