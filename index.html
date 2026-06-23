@@ -853,11 +853,16 @@ function toggleEntry(el) {
 // ── 투표 화면 ──
 function renderVoteScreen() {
   const app = document.getElementById("app");
-  // 카드/칩/리스트만 숨기기 (fab는 유지)
-  app.querySelectorAll(".card, .chips, .list").forEach(el => el.style.display = "none");
+  // 칼로리 카드, 리스트만 숨기기 (칩은 유지)
+  app.querySelectorAll(".card, .list").forEach(el => el.style.display = "none");
 
   const pollList = Object.values(polls);
-  let html = '<div class="list" style="display:block!important">';
+  let html = '<div class="list" style="display:block!important;padding-bottom:160px">';
+
+  // 멤버 선택 안내 (전체 뷰일 때만)
+  if (view === "all") {
+    html += '<div style="margin-bottom:14px;padding:11px 14px;background:var(--accent-soft);border-radius:12px;font-size:13px;font-weight:700;color:var(--accent)">위에서 내 이름을 선택하면 투표할 수 있어요 👆</div>';
+  }
 
   if (pollList.length === 0) {
     html += '<div class="empty">아직 투표가 없어요.<br>아래 + 버튼으로 만들어보세요!</div>';
@@ -865,7 +870,10 @@ function renderVoteScreen() {
     pollList.slice().reverse().forEach(poll => {
       const totalVotes = Object.values(poll.options || {}).reduce((s, o) => s + (o.voters ? Object.keys(o.voters).length : 0), 0);
       html += '<div class="card" style="margin:0 0 14px">';
-      html += '<div style="font-size:16px;font-weight:800;margin-bottom:4px">' + esc(poll.title) + '</div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
+        '<div style="font-size:16px;font-weight:800">' + esc(poll.title) + '</div>' +
+        '<button onclick="deletePoll(\'' + poll.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' +
+        '</div>';
       html += '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + esc(poll.author) + ' · 총 ' + totalVotes + '표</div>';
 
       Object.entries(poll.options || {}).forEach(([optId, opt]) => {
@@ -873,24 +881,25 @@ function renderVoteScreen() {
         const count = voters.length;
         const pct = totalVotes ? Math.round(count / totalVotes * 100) : 0;
         const myVote = view !== "all" && voters.includes(view);
-        html += '<div style="margin-bottom:10px">';
+        html += '<div style="margin-bottom:12px">';
         html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
           '<span style="font-size:14px;font-weight:' + (myVote ? '800' : '600') + ';color:' + (myVote ? 'var(--accent)' : 'var(--ink)') + '">' +
           (myVote ? '✓ ' : '') + esc(opt.text) + '</span>' +
           '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + count + '표 ' + pct + '%</span></div>';
-        html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+        html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden;margin-bottom:7px">' +
           '<div style="height:100%;width:' + pct + '%;background:' + (myVote ? 'var(--accent)' : 'var(--faint)') + ';border-radius:99px;transition:width .4s ease"></div></div>';
-        if (view !== "all") {
-          html += '<button onclick="castVote(\'' + poll.id + '\',\'' + optId + '\')" style="margin-top:6px;padding:6px 14px;border-radius:99px;border:1px solid ' +
-            (myVote ? 'var(--accent)' : 'var(--line)') + ';background:' + (myVote ? 'var(--accent-soft)' : 'transparent') +
-            ';color:' + (myVote ? 'var(--accent)' : 'var(--muted)') + ';font-size:13px;font-weight:700">' +
-            (myVote ? '취소' : '투표') + '</button>';
-        }
+        // 투표 버튼 항상 표시 (전체 뷰면 비활성화)
+        html += '<button onclick="castVote(\'' + poll.id + '\',\'' + optId + '\')" ' +
+          (view === "all" ? 'disabled ' : '') +
+          'style="padding:7px 16px;border-radius:99px;border:1px solid ' +
+          (myVote ? 'var(--accent)' : 'var(--line)') + ';background:' + (myVote ? 'var(--accent-soft)' : 'transparent') +
+          ';color:' + (myVote ? 'var(--accent)' : (view === "all" ? 'var(--faint)' : 'var(--muted)')) +
+          ';font-size:13px;font-weight:700">' +
+          (myVote ? '✓ 취소' : '투표하기') + '</button>';
         html += '</div>';
       });
 
-      // 선택지 추가 버튼
-      html += '<button onclick="openAddOption(\'' + poll.id + '\')" style="width:100%;margin-top:6px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:13px;font-weight:700">+ 선택지 추가</button>';
+      html += '<button onclick="openAddOption(\'' + poll.id + '\')" style="width:100%;margin-top:4px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:13px;font-weight:700">+ 선택지 추가</button>';
       html += '</div>';
     });
   }
@@ -938,6 +947,8 @@ async function submitNewPoll() {
   const author = document.getElementById("poll-author").value;
   const rawOptions = document.getElementById("poll-options").value.trim();
   if (!title) return;
+  const btn = document.getElementById("poll-save");
+  btn.disabled = true;
   const optLines = rawOptions.split("\n").map(l => l.trim()).filter(Boolean);
   const options = {};
   optLines.forEach((text, i) => { options["opt" + i] = { text, voters: {} }; });
@@ -960,6 +971,13 @@ function openAddOption(pollId) {
   const upd = () => { document.getElementById("opt-save").disabled = !inp.value.trim(); };
   inp.addEventListener("input", upd); upd();
   setTimeout(() => inp.focus(), 250);
+}
+
+async function deletePoll(pollId) {
+  if (!confirm("이 투표를 삭제할까요?")) return;
+  delete polls[pollId];
+  await dbDelete("polls/" + pollId);
+  await loadAll(); render();
 }
 
 async function submitAddOption(pollId) {
@@ -997,7 +1015,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll });
 
 start();
 </script>
