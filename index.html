@@ -302,7 +302,14 @@ async function removeEntry(id) {
 function shiftDay(d) { const x = new Date(date); x.setDate(x.getDate()+d); date = x; render(); }
 function shiftMonth(d) { date = new Date(date.getFullYear(), date.getMonth()+d, 1); render(); }
 function setMode(m) { mode = m; render(); }
-function setView(v) { view = v; render(); }
+function setView(v) {
+  view = v;
+  const chips = document.querySelector(".chips");
+  const scrollLeft = chips ? chips.scrollLeft : 0;
+  render();
+  const newChips = document.querySelector(".chips");
+  if (newChips) newChips.scrollLeft = scrollLeft;
+}
 
 // ── 메인 렌더 ──
 function render() {
@@ -339,7 +346,9 @@ function render() {
     name: m.name,
     kcal: (isMonth
       ? entries.filter(e => e.date.startsWith(monthPrefix) && e.member === m.name)
-      : dayEntries.filter(e => e.member === m.name)
+      : isWeek
+        ? weekEntries.filter(e => e.member === m.name)
+        : dayEntries.filter(e => e.member === m.name)
     ).reduce((s,e) => s + e.calories, 0),
   }));
   const maxKcal = Math.max(1, ...perMember.map(p => p.kcal));
@@ -504,6 +513,8 @@ function openAdd() {
     '<div style="display:flex;align-items:center;gap:8px">' +
     '<input class="ti num" id="f-kcal" inputmode="numeric" placeholder="모르면 비워두세요" style="flex:1" />' +
     '<span style="font-size:15px;font-weight:700;color:var(--muted)">kcal</span></div>' +
+    '<button id="ai-btn" onclick="estimateCalories()" style="width:100%;margin-top:10px;padding:13px 16px;border-radius:14px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;">✨ 칼로리 추정하기</button>' +
+    '<div id="ai-result" style="display:none;margin-top:10px;padding:13px 16px;border-radius:14px;background:var(--bg);border:1px solid var(--line);font-size:13px;color:var(--muted);line-height:1.6;"></div>' +
     '<button class="save" id="f-save" onclick="submitAdd()">' + iconCheck() + ' 기록 저장</button>' +
     '</div></div>';
   const food = document.getElementById("f-food");
@@ -655,12 +666,13 @@ async function start() {
   render();
   try { await loadAll(); render(); }
   catch (e) {
-    document.getElementById("app").innerHTML = '<div class="setup"><h1>연결 오류</h1><p>서버 주소를 확인해주세요. 주소가 올바른지, Realtime Database가 테스트 모드인지 확인이 필요해요.</p><button class="save" onclick="resetDb()">서버 주소 다시 설정</button></div>';
+    // 연결 실패해도 기존 데이터 유지, loaded만 true로
+    if (!loaded) { loaded = true; render(); }
     return;
   }
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
-    if (document.getElementById("modal").innerHTML) return; // 입력 중엔 갱신 생략
+    if (document.getElementById("modal").innerHTML) return;
     try { await loadAll(); render(); } catch (e) {}
   }, 5000);
 }
@@ -681,8 +693,94 @@ function iconTrash() { return '<span style="display:flex;color:var(--faint)">' +
 function iconX() { return '<span style="display:flex;color:var(--muted)">' + svg('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>', 22) + '</span>'; }
 function iconCheck() { return '<span style="display:flex">' + svg('<polyline points="20 6 9 17 4 12"/>', 19) + '</span>'; }
 
+// ── 내장 칼로리 DB ──
+const KCAL_DB = [
+  {k:["밥","흰밥","쌀밥"],n:"밥 1공기",c:300}, {k:["현미밥","현미"],n:"현미밥 1공기",c:280},
+  {k:["라면"],n:"라면 1봉",c:500}, {k:["짜장면","짜장"],n:"짜장면",c:670},
+  {k:["짬뽕"],n:"짬뽕",c:550}, {k:["우동"],n:"우동",c:400},
+  {k:["냉면"],n:"냉면",c:480}, {k:["파스타","스파게티"],n:"파스타",c:600},
+  {k:["볶음밥"],n:"볶음밥",c:550}, {k:["비빔밥"],n:"비빔밥",c:560},
+  {k:["김밥"],n:"김밥 1줄",c:300}, {k:["떡볶이"],n:"떡볶이 1인분",c:400},
+  {k:["삼겹살"],n:"삼겹살 200g",c:700}, {k:["목살"],n:"목살 200g",c:600},
+  {k:["치킨","후라이드"],n:"치킨 반마리",c:800}, {k:["양념치킨"],n:"양념치킨 반마리",c:900},
+  {k:["계란","달걀"],n:"계란 1개",c:75,unit:true},
+  {k:["닭가슴살"],n:"닭가슴살 100g",c:165}, {k:["소고기","불고기"],n:"소고기 100g",c:250},
+  {k:["두부"],n:"두부 반모",c:100},
+  {k:["식빵"],n:"식빵 1장",c:80,unit:true}, {k:["토스트"],n:"토스트",c:150},
+  {k:["바나나"],n:"바나나 1개",c:90,unit:true}, {k:["사과"],n:"사과 1개",c:80,unit:true},
+  {k:["고구마"],n:"고구마 1개",c:130,unit:true}, {k:["감자"],n:"감자 1개",c:100,unit:true},
+  {k:["샐러드"],n:"샐러드",c:100}, {k:["시리얼"],n:"시리얼 1그릇",c:350},
+  {k:["아이스크림"],n:"아이스크림 1개",c:200,unit:true},
+  {k:["빵","크루아상","베이글"],n:"빵 1개",c:200,unit:true}, {k:["과자"],n:"과자 1봉",c:250},
+  {k:["우유"],n:"우유 200ml",c:130}, {k:["아메리카노","커피"],n:"아메리카노",c:10},
+  {k:["라떼","카페라떼"],n:"카페라떼",c:180}, {k:["콜라"],n:"콜라 350ml",c:140},
+  {k:["맥주"],n:"맥주 500ml",c:200}, {k:["소주"],n:"소주 1병",c:400},
+  {k:["된장찌개","된장"],n:"된장찌개",c:150}, {k:["김치찌개"],n:"김치찌개",c:200},
+  {k:["순두부찌개","순두부"],n:"순두부찌개",c:250}, {k:["미역국"],n:"미역국",c:80},
+  {k:["삼계탕"],n:"삼계탕",c:800}, {k:["설렁탕"],n:"설렁탕",c:500},
+  {k:["버거","햄버거"],n:"햄버거",c:550}, {k:["피자"],n:"피자 2조각",c:600},
+  {k:["감자튀김","감튀"],n:"감자튀김",c:340}, {k:["김치"],n:"김치",c:30},
+  {k:["잡채"],n:"잡채",c:250}, {k:["순대"],n:"순대 1인분",c:350},
+];
+
+function estimateCalories() {
+  const food = document.getElementById("f-food").value.trim();
+  if (!food) { alert("먼저 음식 이름을 입력해주세요!"); return; }
+  const btn = document.getElementById("ai-btn");
+  const resultBox = document.getElementById("ai-result");
+  btn.disabled = true;
+  btn.innerHTML = '🔍 추정 중...';
+  resultBox.style.display = "none";
+
+  const lines = food.split(/[\n,]+/).map(l => l.trim()).filter(Boolean);
+  const results = [];
+  let total = 0;
+
+  lines.forEach(line => {
+    const low = line.toLowerCase();
+    const numMatch = line.match(/(\d+)/);
+    const qty = numMatch ? parseInt(numMatch[1]) : 1;
+    let matched = null;
+    for (const item of KCAL_DB) {
+      if (item.k.some(k => low.includes(k))) { matched = item; break; }
+    }
+    if (matched) {
+      const cal = matched.unit ? matched.c * qty : matched.c;
+      results.push({ name: line, kcal: cal, note: matched.n + (matched.unit && qty > 1 ? " × " + qty : "") });
+      total += cal;
+    } else {
+      results.push({ name: line, kcal: null, note: "DB에 없음 — 직접 입력" });
+    }
+  });
+
+  let html = '<div style="font-weight:700;color:var(--ink);font-size:14px;margin-bottom:8px">📊 추정 결과</div>';
+  results.forEach(item => {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--line)">' +
+      '<span style="color:var(--ink);font-size:14px">' + esc(item.name) +
+      '<span style="display:block;color:var(--muted);font-size:11px">' + esc(item.note) + '</span></span>' +
+      (item.kcal !== null
+        ? '<span style="font-weight:700;color:var(--accent);white-space:nowrap">' + item.kcal.toLocaleString() + ' kcal</span>'
+        : '<span style="color:var(--faint);font-size:12px">?</span>') +
+      '</div>';
+  });
+  if (total > 0) {
+    html += '<div style="display:flex;justify-content:space-between;margin-top:8px;font-size:15px;font-weight:800;color:var(--ink)">' +
+      '<span>합계</span><span style="color:var(--accent)">' + total.toLocaleString() + ' kcal</span></div>';
+    html += '<button onclick="applyEstimate(' + total + ')" style="width:100%;margin-top:10px;padding:10px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:14px;font-weight:800;">이 값으로 입력하기</button>';
+  }
+  resultBox.innerHTML = html;
+  resultBox.style.display = "block";
+  btn.disabled = false;
+  btn.innerHTML = '✨ 칼로리 추정하기';
+}
+
+function applyEstimate(kcal) {
+  const inp = document.getElementById("f-kcal");
+  if (inp) inp.value = kcal;
+}
+
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate });
 
 start();
 </script>
