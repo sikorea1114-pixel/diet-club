@@ -923,7 +923,10 @@ function renderNoticeHtml() {
       html += '<div class="card" style="margin:0 0 14px">';
       html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
         '<div style="font-size:16px;font-weight:800;flex:1;margin-right:8px">' + esc(notice.title) + '</div>' +
-        (view === "이성호" ? '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' : '') +
+        '<div style="display:flex;gap:6px;flex-shrink:0">' +
+        '<button onclick="openEditNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:700;padding:2px 4px">수정</button>' +
+        (view === "이성호" ? '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px">삭제</button>' : '') +
+        '</div>' +
         '</div>';
       if (notice.content) {
         html += '<div style="font-size:14px;color:var(--ink);line-height:1.6;margin-bottom:10px;white-space:pre-wrap">' + esc(notice.content) + '</div>';
@@ -977,6 +980,38 @@ async function deleteNotice(id) {
   if (!confirm("이 글을 삭제할까요?")) return;
   delete notices[id];
   await dbDelete("notices/" + id);
+  await loadAll(); render();
+}
+
+function openEditNotice(id) {
+  const notice = notices[id];
+  if (!notice) return;
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>글 수정</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<label class="flabel">제목</label>' +
+    '<input class="ti" id="edit-title" value="' + esc(notice.title) + '" />' +
+    '<label class="flabel" style="margin-top:14px">내용</label>' +
+    '<textarea class="ti" id="edit-content" rows="5" style="resize:none">' + esc(notice.content || "") + '</textarea>' +
+    '<button class="save" id="edit-save" onclick="submitEditNotice(\'' + id + '\')">' + iconCheck() + ' 저장하기</button>' +
+    '</div></div>';
+  const t = document.getElementById("edit-title");
+  const upd = () => { document.getElementById("edit-save").disabled = !t.value.trim(); };
+  t.addEventListener("input", upd);
+  setTimeout(() => t.focus(), 250);
+}
+
+async function submitEditNotice(id) {
+  const title = document.getElementById("edit-title").value.trim();
+  const content = document.getElementById("edit-content").value.trim();
+  if (!title) return;
+  const btn = document.getElementById("edit-save");
+  btn.disabled = true;
+  notices[id].title = title;
+  notices[id].content = content;
+  await dbPut("notices/" + id + "/title", title);
+  await dbPut("notices/" + id + "/content", content);
+  closeModal();
   await loadAll(); render();
 }
 
@@ -1139,7 +1174,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice });
 
 start();
 </script>
