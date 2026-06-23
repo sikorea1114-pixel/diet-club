@@ -89,6 +89,7 @@
   }
   .entry .mid { flex: 1; min-width: 0; }
   .entry .food { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry.expanded .food { white-space: normal; overflow: visible; text-overflow: unset; word-break: break-word; }
   .entry .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .entry .kc { font-size: 16px; font-weight: 800; letter-spacing: -0.02em; }
   .entry .kc small { font-size: 11px; color: var(--muted); font-weight: 700; }
@@ -476,11 +477,11 @@ function render() {
 
 function entryCard(e) {
   const c = colorOf(e.member);
-  return '<div class="entry">' +
+  return '<div class="entry" onclick="toggleEntry(this)">' +
     '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(avatarOf(e.member)) + '</span>' +
     '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum">' + e.calories.toLocaleString() + '<small> kcal</small></span>' +
-    '<button class="del" onclick="removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
+    '<button class="del" onclick="event.stopPropagation();removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
 }
 
 // ── 입력 팝업 ──
@@ -779,8 +780,12 @@ function applyEstimate(kcal) {
   if (inp) inp.value = kcal;
 }
 
+function toggleEntry(el) {
+  el.classList.toggle("expanded");
+}
+
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry });
 
 start();
 </script>
