@@ -199,6 +199,7 @@ let DB_URL = "https://diet-cae5a-default-rtdb.firebaseio.com";
 let members = [];
 let entries = [];
 let polls = {};
+let notices = {};
 let date = new Date();
 let view = "all";
 let mode = "day";
@@ -272,10 +273,11 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p] = await Promise.all([dbGet("members"), dbGet("entries"), dbGet("polls")]);
+  const [m, e, p, n] = await Promise.all([dbGet("members"), dbGet("entries"), dbGet("polls"), dbGet("notices")]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
   polls = p || {};
+  notices = n || {};
   loaded = true;
 }
 
@@ -337,6 +339,11 @@ function render() {
   const isMonth = mode === "month";
   const isWeek = mode === "week";
   const isVote = mode === "vote";
+  const isNotice = mode === "notice";
+
+  // 오늘 새 공지 있는지 체크 (레드닷)
+  const todayKey = fmtKey(new Date());
+  const hasNewNotice = Object.values(notices).some(n => n.date === todayKey);
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
     const d = new Date(e.timestamp);
@@ -365,7 +372,11 @@ function render() {
   html += '<div class="toggle">' +
     '<button class="' + (mode==="day"?"on":"") + '" onclick="setMode(\'day\')">일별</button>' +
     '<button class="' + (mode==="week"?"on":"") + '" onclick="setMode(\'week\')">주간</button>' +
-    '<button class="' + (mode==="month"?"on":"") + '" onclick="setMode(\'month\')">월별</button>' + '<button class="' + (mode==="vote"?"on":"") + '" onclick="setMode(\'vote\')">🗳️</button></div>'; ;
+    '<button class="' + (mode==="month"?"on":"") + '" onclick="setMode(\'month\')">월별</button>' +
+    '<button class="' + (mode==="vote"?"on":"") + '" onclick="setMode(\'vote\')">🗳️</button>' +
+    '<button class="' + (mode==="notice"?"on":"") + '" onclick="setMode(\'notice\')" style="position:relative">📌' +
+    (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+    '</button></div>'; ;
   html += '</div><div class="nav">';
   html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(-1)":"shiftDay(-1)") + '" aria-label="이전">' + iconChevron("left") + '</button>';
   if (isMonth) {
@@ -376,8 +387,8 @@ function render() {
   html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(1)":"shiftDay(1)") + '" aria-label="다음">' + iconChevron("right") + '</button>';
   html += '</div></header>';
 
-  // 합계 카드 + 스트릭/MVP (투표 모드 제외)
-  if (!isVote) {
+  // 합계 카드 + 스트릭/MVP (투표/공지 모드 제외)
+  if (!isVote && !isNotice) {
     html += '<div class="card">';
     html += '<div class="sub">' + (isMonth
       ? (view==="all" ? "이번 달 모임 전체" : "이번 달 " + esc(view) + " 님")
@@ -464,8 +475,8 @@ function render() {
   html += '<button class="chip add" onclick="openMember()">' + iconPlus(15) + ' 멤버</button>';
   html += '</div>';
 
-  // 리스트 (투표 모드 제외)
-  if (!isVote) {
+  // 리스트 (투표/공지 모드 제외)
+  if (!isVote && !isNotice) {
     html += '<div class="list">';
     if (!loaded) {
       html += '<div class="empty">불러오는 중…</div>';
@@ -523,16 +534,18 @@ function render() {
       });
     }
     html += '</div>';
-  } else {
-    // 투표 화면
+  } else if (isVote) {
     html += renderVoteHtml();
+  } else if (isNotice) {
+    html += renderNoticeHtml();
   }
 
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
   if (isVote) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
+  if (isNotice) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
 
   app.innerHTML = html;
 }
@@ -898,6 +911,127 @@ function renderVoteHtml() {
   return html;
 }
 
+// ── 공지 화면 ──
+function renderNoticeHtml() {
+  const noticeList = Object.values(notices).sort((a,b) => b.createdAt - a.createdAt);
+  let html = '<div class="list" style="padding-bottom:160px">';
+
+  if (noticeList.length === 0) {
+    html += '<div class="empty">아직 글이 없어요.<br>아래 + 버튼으로 첫 글을 써보세요!</div>';
+  } else {
+    noticeList.forEach(notice => {
+      html += '<div class="card" style="margin:0 0 14px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">' +
+        '<div style="font-size:16px;font-weight:800;flex:1;margin-right:8px">' + esc(notice.title) + '</div>' +
+        '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' +
+        '</div>';
+      if (notice.content) {
+        html += '<div style="font-size:14px;color:var(--ink);line-height:1.6;margin-bottom:10px;white-space:pre-wrap">' + esc(notice.content) + '</div>';
+      }
+      html += '<div style="font-size:12px;color:var(--muted);font-weight:600">' +
+        esc(notice.author) + ' · ' + fmtDateHeader(notice.date) + ' ' + fmtTime(notice.createdAt) +
+        (notice.date === fmtKey(new Date()) ? ' <span style="color:#E0726A;font-weight:800">NEW</span>' : '') +
+        '</div>';
+      html += '</div>';
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function openNewNotice() {
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>글 쓰기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<label class="flabel">제목</label>' +
+    '<input class="ti" id="notice-title" placeholder="제목을 입력하세요" />' +
+    '<label class="flabel" style="margin-top:14px">내용</label>' +
+    '<textarea class="ti" id="notice-content" rows="5" style="resize:none" placeholder="내용을 입력하세요"></textarea>' +
+    '<label class="flabel" style="margin-top:14px">작성자</label>' +
+    '<select class="ti" id="notice-author">' + members.map(m => '<option>' + esc(m.name) + '</option>').join("") + '</select>' +
+    '<button class="save" id="notice-save" onclick="submitNewNotice()" disabled>' + iconCheck() + ' 등록하기</button>' +
+    '</div></div>';
+  const t = document.getElementById("notice-title");
+  const upd = () => { document.getElementById("notice-save").disabled = !t.value.trim(); };
+  t.addEventListener("input", upd);
+  setTimeout(() => t.focus(), 250);
+}
+
+async function submitNewNotice() {
+  const title = document.getElementById("notice-title").value.trim();
+  const content = document.getElementById("notice-content").value.trim();
+  const author = document.getElementById("notice-author").value;
+  if (!title) return;
+  const btn = document.getElementById("notice-save");
+  btn.disabled = true;
+  const id = "notice-" + Date.now();
+  const notice = { id, title, content, author, date: fmtKey(new Date()), createdAt: Date.now() };
+  notices[id] = notice;
+  await dbPut("notices/" + id, notice);
+  closeModal();
+  await loadAll(); render();
+}
+
+async function deleteNotice(id) {
+  if (!confirm("이 글을 삭제할까요?")) return;
+  delete notices[id];
+  await dbDelete("notices/" + id);
+  await loadAll(); render();
+}
+
+// ── 투표 화면 ──
+function renderVoteHtml() {
+  const pollList = Object.values(polls);
+  let html = '<div class="list" style="padding-bottom:160px">';
+
+  if (view === "all") {
+    html += '<div style="margin-bottom:14px;padding:11px 14px;background:var(--accent-soft);border-radius:12px;font-size:13px;font-weight:700;color:var(--accent)">위에서 내 이름을 선택하면 투표할 수 있어요 👆</div>';
+  }
+
+  if (pollList.length === 0) {
+    html += '<div class="empty">아직 투표가 없어요.<br>아래 + 버튼으로 만들어보세요!</div>';
+  } else {
+    pollList.slice().reverse().forEach(poll => {
+      const totalVotes = Object.values(poll.options || {}).reduce((s, o) => s + (o.voters ? Object.keys(o.voters).length : 0), 0);
+      html += '<div class="card" style="margin:0 0 14px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
+        '<div style="font-size:16px;font-weight:800">' + esc(poll.title) + '</div>' +
+        '<button onclick="deletePoll(\'' + poll.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' +
+        '</div>';
+      html += '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + esc(poll.author) + ' · 총 ' + totalVotes + '표</div>';
+
+      Object.entries(poll.options || {}).forEach(([optId, opt]) => {
+        const voters = opt.voters ? Object.keys(opt.voters) : [];
+        const count = voters.length;
+        const pct = totalVotes ? Math.round(count / totalVotes * 100) : 0;
+        const myVote = view !== "all" && voters.includes(view);
+        html += '<div style="margin-bottom:12px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+          '<span style="font-size:14px;font-weight:' + (myVote ? '800' : '600') + ';color:' + (myVote ? 'var(--accent)' : 'var(--ink)') + '">' +
+          (myVote ? '✓ ' : '') + esc(opt.text) + '</span>' +
+          '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + count + '표 ' + pct + '%</span></div>';
+        html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden;margin-bottom:7px">' +
+          '<div style="height:100%;width:' + pct + '%;background:' + (myVote ? 'var(--accent)' : 'var(--faint)') + ';border-radius:99px"></div></div>';
+        if (view !== "all") {
+          html += '<button onclick="castVote(\'' + poll.id + '\',\'' + optId + '\')" ' +
+            'style="padding:7px 16px;border-radius:99px;border:1px solid ' +
+            (myVote ? 'var(--accent)' : 'var(--line)') + ';background:' + (myVote ? 'var(--accent-soft)' : 'transparent') +
+            ';color:' + (myVote ? 'var(--accent)' : 'var(--muted)') + ';font-size:13px;font-weight:700">' +
+            (myVote ? '✓ 취소' : '투표하기') + '</button>';
+        }
+        html += '</div>';
+      });
+
+      html += '<button onclick="openAddOption(\'' + poll.id + '\')" style="width:100%;margin-top:4px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:13px;font-weight:700">+ 선택지 추가</button>';
+      html += '</div>';
+    });
+  }
+
+  html += '</div>';
+  return html;
+}
+
 async function castVote(pollId, optId) {
   if (view === "all") { alert("멤버를 선택한 뒤 투표해주세요!"); return; }
   const poll = polls[pollId];
@@ -1005,7 +1139,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice });
 
 start();
 </script>
