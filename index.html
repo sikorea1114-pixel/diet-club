@@ -200,11 +200,18 @@ let members = [];
 let entries = [];
 let polls = {};
 let notices = {};
+let seasons = {};
+let currentSeasonId = "default"; // "default" = 기존 경로 (season-1)
 let date = new Date();
 let view = "all";
 let mode = "day";
 let loaded = false;
 let pollTimer = null;
+
+// 현재 시즌 DB 경로 prefix
+function seasonPath(sub) {
+  return currentSeasonId === "default" ? sub : "seasons/" + currentSeasonId + "/" + sub;
+}
 
 // ── DB 주소 결정 (URL 해시 > localStorage) ──
 (function initDbUrl() {
@@ -273,11 +280,18 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n] = await Promise.all([dbGet("members"), dbGet("entries"), dbGet("polls"), dbGet("notices")]);
+  const [m, e, p, n, s] = await Promise.all([
+    dbGet(seasonPath("members")),
+    dbGet(seasonPath("entries")),
+    dbGet(seasonPath("polls")),
+    dbGet(seasonPath("notices")),
+    dbGet("seasons")
+  ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
   polls = p || {};
   notices = n || {};
+  seasons = s || {};
   loaded = true;
 }
 
@@ -287,7 +301,7 @@ async function addMember(name) {
   if (!t || members.some(m => m.name === t)) return;
   members = [...members, { name: t }];
   view = t;
-  await dbPut("members", members);
+  await dbPut(seasonPath("members"), members);
   render();
 }
 async function addEntry(member, food, calories) {
@@ -297,12 +311,12 @@ async function addEntry(member, food, calories) {
   };
   entries = [...entries, entry];
   render();
-  await dbPut("entries/" + entry.id, entry);
+  await dbPut(seasonPath("entries") + "/" + entry.id, entry);
 }
 async function removeEntry(id) {
   entries = entries.filter(e => e.id !== id);
   render();
-  await dbDelete("entries/" + id);
+  await dbDelete(seasonPath("entries") + "/" + id);
 }
 function shiftDay(d) { const x = new Date(date); x.setDate(x.getDate()+d); date = x; render(); }
 function shiftMonth(d) { date = new Date(date.getFullYear(), date.getMonth()+d, 1); render(); }
@@ -340,6 +354,7 @@ function render() {
   const isWeek = mode === "week";
   const isVote = mode === "vote";
   const isNotice = mode === "notice";
+  const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
   // 오늘 새 공지 있는지 체크 (레드닷)
   const todayKey = fmtKey(new Date());
@@ -369,6 +384,16 @@ function render() {
   // 헤더
   html += '<header><div class="toprow">';
   html += '<div class="brand">' + iconUsers() + '<span> 다이어트 모임</span></div>';
+
+  // 시즌 선택
+  const currentSeasonName = currentSeasonId === "default"
+    ? "시즌 1"
+    : (seasons[currentSeasonId] ? seasons[currentSeasonId].name : "시즌");
+  const isCurrentSeason = currentSeasonId === "default" || (seasons[currentSeasonId] && !seasons[currentSeasonId].ended);
+  html += '<button onclick="openSeasonMenu()" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--muted)">' +
+    esc(currentSeasonName) +
+    (!isCurrentSeason ? ' <span style="color:#E0726A;font-size:10px">종료</span>' : '') +
+    ' ▾</button>';
   html += '<div class="toggle">' +
     '<button class="' + (mode==="day"?"on":"") + '" onclick="setMode(\'day\')">일별</button>' +
     '<button class="' + (mode==="week"?"on":"") + '" onclick="setMode(\'week\')">주간</button>' +
@@ -543,9 +568,10 @@ function render() {
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote && !isNotice) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
-  if (isVote) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
-  if (isNotice) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
+  if (members.length && !isVote && !isNotice && !isReadOnly) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
+  if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
+  if (isReadOnly) html += '<div style="position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
 
   app.innerHTML = html;
 }
@@ -859,6 +885,72 @@ function toggleEntry(el) {
   el.classList.toggle("expanded");
 }
 
+// ── 시즌 관리 ──
+function openSeasonMenu() {
+  const m = document.getElementById("modal");
+  const seasonList = [
+    { id: "default", name: "시즌 1", ended: false },
+    ...Object.values(seasons).sort((a,b) => a.createdAt - b.createdAt)
+  ];
+
+  let html = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>시즌 선택</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>';
+
+  html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">';
+  seasonList.forEach(s => {
+    const isCurrent = s.id === currentSeasonId;
+    html += '<button onclick="switchSeason(\'' + s.id + '\')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-radius:14px;border:1px solid ' +
+      (isCurrent ? 'var(--accent)' : 'var(--line)') + ';background:' + (isCurrent ? 'var(--accent-soft)' : 'var(--surface)') + ';font-size:15px;font-weight:700;color:var(--ink)">' +
+      esc(s.name) +
+      '<span style="font-size:12px;font-weight:700;color:' + (s.ended ? '#E0726A' : 'var(--accent)') + '">' +
+      (isCurrent ? '현재' : s.ended ? '종료' : '진행중') + '</span>' +
+      '</button>';
+  });
+  html += '</div>';
+
+  if (view === "이성호") {
+    html += '<button onclick="openNewSeason()" style="width:100%;padding:14px;border-radius:14px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:14px;font-weight:800">+ 새 시즌 시작</button>';
+  }
+
+  html += '</div></div>';
+  m.innerHTML = html;
+}
+
+function switchSeason(id) {
+  currentSeasonId = id;
+  view = "all";
+  members = []; entries = []; polls = {}; notices = {}; loaded = false;
+  closeModal();
+  start();
+}
+
+function openNewSeason() {
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>새 시즌 시작</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<label class="flabel">시즌 이름</label>' +
+    '<input class="ti" id="season-name" placeholder="예: 2026 여름" />' +
+    '<button class="save" id="season-save" onclick="submitNewSeason()" disabled>' + iconCheck() + ' 시작하기</button>' +
+    '</div></div>';
+  const t = document.getElementById("season-name");
+  const upd = () => { document.getElementById("season-save").disabled = !t.value.trim(); };
+  t.addEventListener("input", upd);
+  setTimeout(() => t.focus(), 250);
+}
+
+async function submitNewSeason() {
+  const name = document.getElementById("season-name").value.trim();
+  if (!name) return;
+  const btn = document.getElementById("season-save");
+  btn.disabled = true;
+  const id = "season-" + Date.now();
+  const season = { id, name, createdAt: Date.now(), ended: false };
+  await dbPut("seasons/" + id, season);
+  seasons[id] = season;
+  closeModal();
+  switchSeason(id);
+}
+
 // ── 투표 화면 ──
 function renderVoteHtml() {
   const pollList = Object.values(polls);
@@ -971,7 +1063,7 @@ async function submitNewNotice() {
   const id = "notice-" + Date.now();
   const notice = { id, title, content, author, date: fmtKey(new Date()), createdAt: Date.now() };
   notices[id] = notice;
-  await dbPut("notices/" + id, notice);
+  await dbPut(seasonPath("notices") + "/" + id, notice);
   closeModal();
   await loadAll(); render();
 }
@@ -979,7 +1071,7 @@ async function submitNewNotice() {
 async function deleteNotice(id) {
   if (!confirm("이 글을 삭제할까요?")) return;
   delete notices[id];
-  await dbDelete("notices/" + id);
+  await dbDelete(seasonPath("notices") + "/" + id);
   await loadAll(); render();
 }
 
@@ -1003,14 +1095,14 @@ function openEditNotice(id) {
 
 async function submitEditNotice(id) {
   const title = document.getElementById("edit-title").value.trim();
-  const content = document.getElementById("edit-content").value.trim();
+  const newContent = document.getElementById("edit-content").value.trim();
   if (!title) return;
   const btn = document.getElementById("edit-save");
   btn.disabled = true;
   notices[id].title = title;
-  notices[id].content = content;
-  await dbPut("notices/" + id + "/title", title);
-  await dbPut("notices/" + id + "/content", content);
+  notices[id].content = newContent;
+  await dbPut(seasonPath("notices") + "/" + id + "/title", title);
+  await dbPut(seasonPath("notices") + "/" + id + "/content", newContent);
   closeModal();
   await loadAll(); render();
 }
@@ -1079,7 +1171,7 @@ async function castVote(pollId, optId) {
   } else {
     opt.voters[view] = true;
   }
-  await dbPut("polls/" + pollId + "/options/" + optId + "/voters", opt.voters);
+  await dbPut(seasonPath("polls") + "/" + pollId + "/options/" + optId + "/voters", opt.voters);
   await loadAll(); render();
 }
 
@@ -1114,7 +1206,7 @@ async function submitNewPoll() {
   const id = "poll-" + Date.now();
   const poll = { id, title, author, options, createdAt: Date.now() };
   polls[id] = poll;
-  await dbPut("polls/" + id, poll);
+  await dbPut(seasonPath("polls") + "/" + id, poll);
   closeModal();
   await loadAll(); render();
 }
@@ -1135,7 +1227,7 @@ function openAddOption(pollId) {
 async function deletePoll(pollId) {
   if (!confirm("이 투표를 삭제할까요?")) return;
   delete polls[pollId];
-  await dbDelete("polls/" + pollId);
+  await dbDelete(seasonPath("polls") + "/" + pollId);
   await loadAll(); render();
 }
 
@@ -1147,7 +1239,7 @@ async function submitAddOption(pollId) {
   const optKeys = Object.keys(poll.options || {});
   const newKey = "opt" + optKeys.length;
   poll.options[newKey] = { text, voters: {} };
-  await dbPut("polls/" + pollId + "/options/" + newKey, { text, voters: {} });
+  await dbPut(seasonPath("polls") + "/" + pollId + "/options/" + newKey, { text, voters: {} });
   closeModal();
   await loadAll(); render();
 }
@@ -1174,7 +1266,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason });
 
 start();
 </script>
