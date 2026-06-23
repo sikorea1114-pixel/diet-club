@@ -198,6 +198,7 @@ const WEEK = ["일","월","화","수","목","금","토"];
 let DB_URL = "https://diet-cae5a-default-rtdb.firebaseio.com";
 let members = [];
 let entries = [];
+let polls = {};
 let date = new Date();
 let view = "all";
 let mode = "day";
@@ -271,9 +272,10 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e] = await Promise.all([dbGet("members"), dbGet("entries")]);
+  const [m, e, p] = await Promise.all([dbGet("members"), dbGet("entries"), dbGet("polls")]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
+  polls = p || {};
   loaded = true;
 }
 
@@ -334,6 +336,7 @@ function render() {
 
   const isMonth = mode === "month";
   const isWeek = mode === "week";
+  const isVote = mode === "vote";
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
     const d = new Date(e.timestamp);
@@ -362,7 +365,7 @@ function render() {
   html += '<div class="toggle">' +
     '<button class="' + (mode==="day"?"on":"") + '" onclick="setMode(\'day\')">일별</button>' +
     '<button class="' + (mode==="week"?"on":"") + '" onclick="setMode(\'week\')">주간</button>' +
-    '<button class="' + (mode==="month"?"on":"") + '" onclick="setMode(\'month\')">월별</button></div>';;
+    '<button class="' + (mode==="month"?"on":"") + '" onclick="setMode(\'month\')">월별</button>' + '<button class="' + (mode==="vote"?"on":"") + '" onclick="setMode(\'vote\')">🗳️</button></div>'; ;
   html += '</div><div class="nav">';
   html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(-1)":"shiftDay(-1)") + '" aria-label="이전">' + iconChevron("left") + '</button>';
   if (isMonth) {
@@ -529,9 +532,13 @@ function render() {
   html += '</div></div>';
 
   // 플로팅 버튼
-  if (members.length) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (isVote) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
 
   app.innerHTML = html;
+
+  // 투표 모드면 카드/칩/리스트 숨기고 투표 화면 그리기
+  if (isVote) renderVoteScreen();
 }
 
 function entryCard(e) {
@@ -843,6 +850,131 @@ function toggleEntry(el) {
   el.classList.toggle("expanded");
 }
 
+// ── 투표 화면 ──
+function renderVoteScreen() {
+  const app = document.getElementById("app");
+  // 카드/칩/리스트만 숨기기 (fab는 유지)
+  app.querySelectorAll(".card, .chips, .list").forEach(el => el.style.display = "none");
+
+  const pollList = Object.values(polls);
+  let html = '<div class="list" style="display:block!important">';
+
+  if (pollList.length === 0) {
+    html += '<div class="empty">아직 투표가 없어요.<br>아래 + 버튼으로 만들어보세요!</div>';
+  } else {
+    pollList.slice().reverse().forEach(poll => {
+      const totalVotes = Object.values(poll.options || {}).reduce((s, o) => s + (o.voters ? Object.keys(o.voters).length : 0), 0);
+      html += '<div class="card" style="margin:0 0 14px">';
+      html += '<div style="font-size:16px;font-weight:800;margin-bottom:4px">' + esc(poll.title) + '</div>';
+      html += '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + esc(poll.author) + ' · 총 ' + totalVotes + '표</div>';
+
+      Object.entries(poll.options || {}).forEach(([optId, opt]) => {
+        const voters = opt.voters ? Object.keys(opt.voters) : [];
+        const count = voters.length;
+        const pct = totalVotes ? Math.round(count / totalVotes * 100) : 0;
+        const myVote = view !== "all" && voters.includes(view);
+        html += '<div style="margin-bottom:10px">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+          '<span style="font-size:14px;font-weight:' + (myVote ? '800' : '600') + ';color:' + (myVote ? 'var(--accent)' : 'var(--ink)') + '">' +
+          (myVote ? '✓ ' : '') + esc(opt.text) + '</span>' +
+          '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + count + '표 ' + pct + '%</span></div>';
+        html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+          '<div style="height:100%;width:' + pct + '%;background:' + (myVote ? 'var(--accent)' : 'var(--faint)') + ';border-radius:99px;transition:width .4s ease"></div></div>';
+        if (view !== "all") {
+          html += '<button onclick="castVote(\'' + poll.id + '\',\'' + optId + '\')" style="margin-top:6px;padding:6px 14px;border-radius:99px;border:1px solid ' +
+            (myVote ? 'var(--accent)' : 'var(--line)') + ';background:' + (myVote ? 'var(--accent-soft)' : 'transparent') +
+            ';color:' + (myVote ? 'var(--accent)' : 'var(--muted)') + ';font-size:13px;font-weight:700">' +
+            (myVote ? '취소' : '투표') + '</button>';
+        }
+        html += '</div>';
+      });
+
+      // 선택지 추가 버튼
+      html += '<button onclick="openAddOption(\'' + poll.id + '\')" style="width:100%;margin-top:6px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:13px;font-weight:700">+ 선택지 추가</button>';
+      html += '</div>';
+    });
+  }
+
+  html += '</div>';
+  app.insertAdjacentHTML('beforeend', html);
+}
+
+async function castVote(pollId, optId) {
+  if (view === "all") { alert("멤버를 선택한 뒤 투표해주세요!"); return; }
+  const poll = polls[pollId];
+  if (!poll) return;
+  const opt = poll.options[optId];
+  if (!opt) return;
+  if (!opt.voters) opt.voters = {};
+  if (opt.voters[view]) {
+    delete opt.voters[view]; // 취소
+  } else {
+    opt.voters[view] = true;
+  }
+  await dbPut("polls/" + pollId + "/options/" + optId + "/voters", opt.voters);
+  await loadAll(); render();
+}
+
+function openNewPoll() {
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>투표 만들기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<label class="flabel">투표 주제</label>' +
+    '<input class="ti" id="poll-title" placeholder="예: 다음 모임 메뉴 뭐 먹을까?" />' +
+    '<label class="flabel" style="margin-top:14px">선택지 (줄바꿈으로 구분)</label>' +
+    '<textarea class="ti" id="poll-options" rows="4" style="resize:none" placeholder="삼겹살&#10;치킨&#10;초밥"></textarea>' +
+    '<label class="flabel" style="margin-top:14px">작성자</label>' +
+    '<select class="ti" id="poll-author">' + members.map(m => '<option>' + esc(m.name) + '</option>').join("") + '</select>' +
+    '<button class="save" id="poll-save" onclick="submitNewPoll()">' + iconCheck() + ' 투표 만들기</button>' +
+    '</div></div>';
+  const t = document.getElementById("poll-title");
+  const upd = () => { document.getElementById("poll-save").disabled = !t.value.trim(); };
+  t.addEventListener("input", upd); upd();
+  setTimeout(() => t.focus(), 250);
+}
+
+async function submitNewPoll() {
+  const title = document.getElementById("poll-title").value.trim();
+  const author = document.getElementById("poll-author").value;
+  const rawOptions = document.getElementById("poll-options").value.trim();
+  if (!title) return;
+  const optLines = rawOptions.split("\n").map(l => l.trim()).filter(Boolean);
+  const options = {};
+  optLines.forEach((text, i) => { options["opt" + i] = { text, voters: {} }; });
+  const id = "poll-" + Date.now();
+  const poll = { id, title, author, options, createdAt: Date.now() };
+  polls[id] = poll;
+  await dbPut("polls/" + id, poll);
+  closeModal();
+  await loadAll(); render();
+}
+
+function openAddOption(pollId) {
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>선택지 추가</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<input class="ti" id="opt-text" placeholder="선택지 이름" />' +
+    '<button class="save" id="opt-save" onclick="submitAddOption(\'' + pollId + '\')">' + iconCheck() + ' 추가</button>' +
+    '</div></div>';
+  const inp = document.getElementById("opt-text");
+  const upd = () => { document.getElementById("opt-save").disabled = !inp.value.trim(); };
+  inp.addEventListener("input", upd); upd();
+  setTimeout(() => inp.focus(), 250);
+}
+
+async function submitAddOption(pollId) {
+  const text = document.getElementById("opt-text").value.trim();
+  if (!text) return;
+  const poll = polls[pollId];
+  if (!poll) return;
+  const optKeys = Object.keys(poll.options || {});
+  const newKey = "opt" + optKeys.length;
+  poll.options[newKey] = { text, voters: {} };
+  await dbPut("polls/" + pollId + "/options/" + newKey, { text, voters: {} });
+  closeModal();
+  await loadAll(); render();
+}
+
 // ── 스트릭 계산 ──
 function calcStreak(memberName) {
   const dates = [...new Set(
@@ -865,7 +997,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption });
 
 start();
 </script>
