@@ -356,9 +356,13 @@ function render() {
   const isNotice = mode === "notice";
   const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
-  // 오늘 새 공지 있는지 체크 (레드닷)
+  // 오늘 새 공지/투표 있는지 체크 (레드닷)
   const todayKey = fmtKey(new Date());
   const hasNewNotice = Object.values(notices).some(n => n.date === todayKey);
+  const hasNewPoll = Object.values(polls).some(p => {
+    const d = new Date(p.createdAt);
+    return fmtKey(d) === todayKey;
+  });
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
     const d = new Date(e.timestamp);
@@ -398,7 +402,9 @@ function render() {
     '<button class="' + (mode==="day"?"on":"") + '" onclick="setMode(\'day\')">일별</button>' +
     '<button class="' + (mode==="week"?"on":"") + '" onclick="setMode(\'week\')">주간</button>' +
     '<button class="' + (mode==="month"?"on":"") + '" onclick="setMode(\'month\')">월별</button>' +
-    '<button class="' + (mode==="vote"?"on":"") + '" onclick="setMode(\'vote\')">🗳️</button>' +
+    '<button class="' + (mode==="vote"?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">🗳️' +
+    (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+    '</button>' +
     '<button class="' + (mode==="notice"?"on":"") + '" onclick="setMode(\'notice\')" style="position:relative">📌' +
     (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
     '</button></div>'; ;
@@ -524,11 +530,19 @@ function render() {
           if (!dayMap[e.date][e.member]) dayMap[e.date][e.member] = [];
           dayMap[e.date][e.member].push(e);
         });
-        const dates = Object.keys(dayMap).sort();
+        const dates = Object.keys(dayMap).sort().reverse(); // 최신 날짜 위로
         dates.forEach(d => {
+          const isToday = d === fmtKey(new Date());
+          const totalCal = Object.values(dayMap[d]).reduce((s,a) => s + a.reduce((ss,e) => ss + e.calories, 0), 0);
+          const uid = "week-" + d;
           html += '<div class="group">';
-          html += '<div class="ghead"><b>' + fmtDateHeader(d) + '</b><span>' +
-            Object.values(dayMap[d]).reduce((s,a)=>s+a.length,0) + '개 기록</span></div>';
+          html += '<div class="ghead" onclick="toggleWeekDay(\'' + uid + '\')" style="cursor:pointer">' +
+            '<b>' + fmtDateHeader(d) + (isToday ? ' <span style="color:var(--accent);font-size:11px;font-weight:800">오늘</span>' : '') + '</b>' +
+            '<span style="display:flex;align-items:center;gap:8px">' +
+            '<span class="tnum" style="font-size:13px">' + (totalCal ? totalCal.toLocaleString() + ' kcal' : '') + '</span>' +
+            '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday ? '▲' : '▼') + '</span>' +
+            '</span></div>';
+          html += '<div id="' + uid + '" style="display:' + (isToday ? 'block' : 'none') + '">';
           Object.keys(dayMap[d]).forEach(name => {
             html += '<div class="group" style="margin-bottom:10px">';
             html += '<div class="ghead"><b>' + esc(name) + '</b></div>';
@@ -536,7 +550,7 @@ function render() {
             dayMap[d][name].sort((a,b)=>a.timestamp-b.timestamp).forEach(e => html += entryCard(e));
             html += '</div></div>';
           });
-          html += '</div>';
+          html += '</div></div>';
         });
       }
     } else if (shown.length === 0) {
@@ -899,6 +913,15 @@ function estimateCalories() {
 function applyEstimate(kcal) {
   const inp = document.getElementById("f-kcal");
   if (inp) inp.value = kcal;
+}
+
+function toggleWeekDay(uid) {
+  const el = document.getElementById(uid);
+  const arrow = document.getElementById(uid + "-arrow");
+  if (!el) return;
+  const isOpen = el.style.display !== "none";
+  el.style.display = isOpen ? "none" : "block";
+  if (arrow) arrow.textContent = isOpen ? "▼" : "▲";
 }
 
 function toggleEntry(el) {
@@ -1286,7 +1309,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason });
 
 start();
 </script>
