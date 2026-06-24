@@ -459,7 +459,7 @@ function render() {
       const mvpData = members.map(m => {
         const wEntries = entries.filter(e => {
           const d = new Date(e.timestamp);
-          return d >= wr2.start && d <= wr2.end && e.member === m.name;
+          return d >= wr2.start && d <= wr2.end && e.member === m.name && e.calories > 0;
         });
         const days = new Set(wEntries.map(e => e.date)).size;
         const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
