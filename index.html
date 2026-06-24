@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title> 🏃🏻🏃‍♀️🏃</title>
+<title> 🏃🏻🏃‍♀️</title>
 <style>
   :root {
     --bg: #F7F6F2; --surface: #FFFFFF; --ink: #1C1C19; --muted: #9B9B92;
@@ -207,7 +207,8 @@ let view = "all";
 let mode = "day";
 let loaded = false;
 let pollTimer = null;
-let cardCollapsed = { streak: true, mvp: true }; // 카드 접힌 상태 유지
+let cardCollapsed = { streak: true, mvp: true };
+let pledges = {}; // 오늘의 다짐
 
 // 현재 시즌 DB 경로 prefix
 function seasonPath(sub) {
@@ -281,18 +282,20 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s] = await Promise.all([
+  const [m, e, p, n, s, pl] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
     dbGet(seasonPath("notices")),
-    dbGet("seasons")
+    dbGet("seasons"),
+    dbGet(seasonPath("pledges/" + fmtKey(new Date())))
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
   polls = p || {};
   notices = n || {};
   seasons = s || {};
+  pledges = pl || {};
   loaded = true;
 }
 
@@ -390,7 +393,7 @@ function render() {
 
   // 헤더
   html += '<header><div class="toprow">';
-  html += '<div class="brand">' + iconUsers() + '<span> 🏃🏻🏃‍♀️🏃</span></div>';
+  html += '<div class="brand">' + iconUsers() + '<span> 🏃🏻🏃‍♀️</span></div>';
 
   // 시즌 선택
   const currentSeasonName = currentSeasonId === "default"
@@ -474,6 +477,32 @@ function render() {
       });
       html += '</div></div>';
     }
+
+    // 오늘의 다짐 카드 (일별 탭 + 멤버 있을 때)
+    if (!isMonth && !isWeek && members.length > 0 && loaded) {
+      html += '<div class="card" style="margin-top:0">';
+      html += '<div class="sub">💬 오늘의 다짐</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
+      members.forEach(m => {
+        const pledge = pledges[m.name];
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
+        html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + esc(m.name) + '</span>';
+        if (pledge) {
+          html += '<span style="font-size:13px;color:var(--ink);flex:1;text-align:right">"' + esc(pledge) + '"</span>';
+        } else {
+          html += '<span style="font-size:12px;color:var(--faint);flex:1;text-align:right">아직 없음</span>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+      const myPledge = view !== "all" ? (pledges[view] || "") : "";
+      html += '<div style="display:flex;gap:8px;margin-top:12px">' +
+        '<input class="ti" id="pledge-input" placeholder="' + (view === "all" ? "이름 선택 후 다짐 입력" : "오늘의 다짐 한 줄") + '" value="' + esc(myPledge) + '" ' + (view === "all" ? 'disabled ' : '') + 'style="flex:1;margin:0" />' +
+        '<button onclick="submitPledge()" ' + (view === "all" ? 'disabled ' : '') + 'style="padding:0 16px;border-radius:12px;border:none;background:' + (view === "all" ? 'var(--faint)' : 'var(--accent)') + ';color:#fff;font-size:13px;font-weight:800">저장</button>' +
+        '</div>';
+      html += '</div>';
+    }
+
     if (view === "all" && members.length > 0 && loaded) {
       const streaks = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).filter(s => s.streak > 0);
       if (streaks.length > 0) {
@@ -796,7 +825,7 @@ function closeModal(e) {
 function renderSetup() {
   document.getElementById("app").innerHTML =
     '<div class="setup">' +
-    '<div class="logo">' + iconUsers() + '<span style="font-weight:700;font-size:14px"> 🏃🏻🏃‍♀️🏃</span></div>' +
+    '<div class="logo">' + iconUsers() + '<span style="font-weight:700;font-size:14px"> 🏃🏻🏃‍♀️</span></div>' +
     '<h1>모임 서버 한 번만 연결하기</h1>' +
     '<p>모임원 모두가 같은 기록을 보려면 무료 데이터베이스(Firebase) 주소가 필요해요. 한 명(보통 모임장)이 한 번만 만들면 됩니다.</p>' +
     '<ol>' +
@@ -1212,6 +1241,19 @@ async function submitNewNotice() {
   await loadAll(); render();
 }
 
+async function submitPledge() {
+  if (view === "all") { alert("이름을 먼저 선택해주세요!"); return; }
+  const text = document.getElementById("pledge-input").value.trim();
+  const todayKey = fmtKey(new Date());
+  pledges[view] = text;
+  if (text) {
+    await dbPut(seasonPath("pledges/" + todayKey + "/" + view), text);
+  } else {
+    await dbDelete(seasonPath("pledges/" + todayKey + "/" + view));
+  }
+  await loadAll(); render();
+}
+
 async function deleteNotice(id) {
   if (!confirm("이 글을 삭제할까요?")) return;
   delete notices[id];
@@ -1410,7 +1452,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge });
 
 start();
 </script>
