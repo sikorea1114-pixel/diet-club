@@ -360,6 +360,8 @@ function render() {
   const isWeek = mode === "week";
   const isVote = mode === "vote";
   const isNotice = mode === "notice";
+  const isCommunity = isVote || isNotice;
+  const isRecord = !isCommunity;
   const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
   // 오늘 새 공지/투표 있는지 체크 (레드닷)
@@ -369,6 +371,7 @@ function render() {
     const d = new Date(p.createdAt);
     return fmtKey(d) === todayKey;
   });
+  const hasNewCommunity = (hasNewNotice && !isNotice) || (hasNewPoll && !isVote);
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
     const d = new Date(e.timestamp);
@@ -405,24 +408,42 @@ function render() {
     (!isCurrentSeason ? ' <span style="color:#E0726A;font-size:10px">종료</span>' : '') +
     ' ▾</button>';
   html += '<div class="toggle">' +
-    '<button class="' + (mode==="day"?"on":"") + '" onclick="setMode(\'day\')">일별</button>' +
-    '<button class="' + (mode==="week"?"on":"") + '" onclick="setMode(\'week\')">주간</button>' +
-    '<button class="' + (mode==="month"?"on":"") + '" onclick="setMode(\'month\')">월별</button>' +
-    '<button class="' + (mode==="vote"?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">🗳️' +
-    (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
-    '</button>' +
-    '<button class="' + (mode==="notice"?"on":"") + '" onclick="setMode(\'notice\')" style="position:relative">📌' +
-    (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+    '<button class="' + (isRecord?"on":"") + '" onclick="setMode(\'day\')">📋 기록</button>' +
+    '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">💬 커뮤니티' +
+    (hasNewCommunity ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
     '</button></div>'; ;
-  html += '</div><div class="nav">';
-  html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(-1)":"shiftDay(-1)") + '" aria-label="이전">' + iconChevron("left") + '</button>';
-  if (isMonth) {
-    html += '<div class="label">' + date.getFullYear() + '년 ' + (date.getMonth()+1) + '월</div>';
+  html += '</div>';
+
+  // 서브 토글
+  if (isRecord) {
+    html += '<div style="display:flex;gap:6px;padding:10px 22px 0">' +
+      '<button onclick="setMode(\'day\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="day"?"var(--ink)":"var(--line)") + ';background:' + (mode==="day"?"var(--ink)":"transparent") + ';color:' + (mode==="day"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">일별</button>' +
+      '<button onclick="setMode(\'week\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="week"?"var(--ink)":"var(--line)") + ';background:' + (mode==="week"?"var(--ink)":"transparent") + ';color:' + (mode==="week"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">주간</button>' +
+      '<button onclick="setMode(\'month\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="month"?"var(--ink)":"var(--line)") + ';background:' + (mode==="month"?"var(--ink)":"transparent") + ';color:' + (mode==="month"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">월별</button>' +
+      '</div>';
   } else {
-    html += '<button class="label" onclick="openCalendar()">' + fmtLabel(date) + iconCal() + '</button>';
+    html += '<div style="display:flex;gap:6px;padding:10px 22px 0">' +
+      '<button onclick="setMode(\'vote\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="vote"?"var(--ink)":"var(--line)") + ';background:' + (mode==="vote"?"var(--ink)":"transparent") + ';color:' + (mode==="vote"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">🗳️ 투표' +
+      (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+      '</button>' +
+      '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
+      (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+      '</button>' +
+      '</div>';
   }
-  html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(1)":"shiftDay(1)") + '" aria-label="다음">' + iconChevron("right") + '</button>';
-  html += '</div></header>';
+
+  if (isRecord) {
+    html += '<div class="nav">';
+    html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(-1)":"shiftDay(-1)") + '" aria-label="이전">' + iconChevron("left") + '</button>';
+    if (isMonth) {
+      html += '<div class="label">' + date.getFullYear() + '년 ' + (date.getMonth()+1) + '월</div>';
+    } else {
+      html += '<button class="label" onclick="openCalendar()">' + fmtLabel(date) + iconCal() + '</button>';
+    }
+    html += '<button class="icon" onclick="' + (isMonth?"shiftMonth(1)":"shiftDay(1)") + '" aria-label="다음">' + iconChevron("right") + '</button>';
+    html += '</div>';
+  }
+  html += '</header>';
 
   // 합계 카드 + 스트릭/MVP (투표/공지 모드 제외)
   if (!isVote && !isNotice) {
