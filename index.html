@@ -208,7 +208,9 @@ let mode = "day";
 let loaded = false;
 let pollTimer = null;
 let cardCollapsed = { streak: true, mvp: true };
-let pledges = {}; // 오늘의 다짐
+let pledges = {};
+let meetDate = "";
+let hall = null;
 
 // 현재 시즌 DB 경로 prefix
 function seasonPath(sub) {
@@ -282,13 +284,15 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
     dbGet(seasonPath("notices")),
     dbGet("seasons"),
-    dbGet(seasonPath("pledges/" + fmtKey(new Date())))
+    dbGet(seasonPath("pledges/" + fmtKey(new Date()))),
+    currentSeasonId === "default" ? dbGet("meetDate") : dbGet("seasons/" + currentSeasonId + "/meetDate"),
+    currentSeasonId === "default" ? dbGet("hall") : dbGet("seasons/" + currentSeasonId + "/hall")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -296,6 +300,8 @@ async function loadAll() {
   notices = n || {};
   seasons = s || {};
   pledges = pl || {};
+  meetDate = md || "";
+  hall = h || null;
   loaded = true;
 }
 
@@ -499,7 +505,43 @@ function render() {
       html += '</div></div>';
     }
 
-    // 오늘의 다짐 카드 (일별 탭 + 멤버 있을 때)
+    // D-day 카드
+    if (!isMonth && !isWeek && view === "all" && meetDate) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const meet = new Date(meetDate); meet.setHours(0,0,0,0);
+      const diff = Math.round((meet - today) / 86400000);
+      if (diff >= 0) {
+        const isToday = diff === 0;
+        html += '<div class="card" style="margin-top:0;background:' + (isToday ? 'var(--accent)' : 'var(--surface)') + '">';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+        html += '<div>';
+        html += '<div style="font-size:13px;font-weight:700;color:' + (isToday ? 'rgba(255,255,255,.8)' : 'var(--muted)') + '">다음 모임</div>';
+        html += '<div style="font-size:22px;font-weight:900;color:' + (isToday ? '#fff' : 'var(--ink)') + ';margin-top:2px">' +
+          (isToday ? '🎉 오늘이에요!' : 'D-' + diff) + '</div>';
+        html += '<div style="font-size:12px;color:' + (isToday ? 'rgba(255,255,255,.7)' : 'var(--muted)') + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div>';
+        html += '</div>';
+        if (!isToday) html += '<div style="font-size:48px">🏃🏻</div>';
+        else html += '<div style="font-size:48px">🎊</div>';
+        html += '</div></div>';
+      }
+    }
+
+    // 명예의 전당 (종료된 시즌 조회 시)
+    if (isReadOnly && hall) {
+      html += '<div class="card" style="margin-top:0">';
+      html += '<div class="sub">🏆 명예의 전당</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">';
+      if (hall.mvp) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">👑 시즌 MVP</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.mvp.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.mvp.days + '일 기록</span></span></div>';
+      if (hall.streak) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">🔥 최장 스트릭</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.streak.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.streak.streak + '일 연속</span></span></div>';
+      if (hall.record) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">📋 최다 기록</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.record.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.record.days + '일</span></span></div>';
+      html += '</div></div>';
+    }
     if (!isMonth && !isWeek && members.length > 0 && loaded) {
       html += '<div class="card" style="margin-top:0">';
       html += '<div class="sub">💬 오늘의 다짐</div>';
@@ -1120,17 +1162,86 @@ function openSeasonMenu() {
       (isCurrent ? 'var(--accent)' : 'var(--line)') + ';background:' + (isCurrent ? 'var(--accent-soft)' : 'var(--surface)') + ';font-size:15px;font-weight:700;color:var(--ink)">' +
       esc(s.name) +
       '<span style="font-size:12px;font-weight:700;color:' + (s.ended ? '#E0726A' : 'var(--accent)') + '">' +
-      (isCurrent ? '현재' : s.ended ? '종료' : '진행중') + '</span>' +
+      (isCurrent ? '현재' : s.ended ? '🏆 종료' : '진행중') + '</span>' +
       '</button>';
   });
   html += '</div>';
 
   if (view === "이성호") {
-    html += '<button onclick="openNewSeason()" style="width:100%;padding:14px;border-radius:14px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:14px;font-weight:800">+ 새 시즌 시작</button>';
+    html += '<div style="display:flex;gap:8px">';
+    html += '<button onclick="openNewSeason()" style="flex:1;padding:14px;border-radius:14px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:14px;font-weight:800">+ 새 시즌</button>';
+    const curSeason = seasonList.find(s => s.id === currentSeasonId);
+    if (curSeason && !curSeason.ended) {
+      html += '<button onclick="confirmEndSeason()" style="flex:1;padding:14px;border-radius:14px;border:1px dashed #E0726A;background:transparent;color:#E0726A;font-size:14px;font-weight:800">시즌 종료</button>';
+    }
+    html += '</div>';
+    // D-day 설정
+    const curMeetDate = seasons[currentSeasonId] && seasons[currentSeasonId].meetDate || meetDate || "";
+    html += '<div style="margin-top:12px">';
+    html += '<div class="sub" style="margin-bottom:8px">📅 다음 모임 날짜</div>';
+    html += '<div style="display:flex;gap:8px">' +
+      '<input type="date" class="ti" id="meet-date" value="' + curMeetDate + '" style="flex:1;margin:0" />' +
+      '<button onclick="saveMeetDate()" style="padding:0 16px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:800">저장</button>' +
+      '</div></div>';
   }
 
   html += '</div></div>';
   m.innerHTML = html;
+}
+
+async function saveMeetDate() {
+  const d = document.getElementById("meet-date").value;
+  if (currentSeasonId === "default") {
+    await dbPut("meetDate", d);
+    seasons._defaultMeetDate = d;
+  } else {
+    await dbPut("seasons/" + currentSeasonId + "/meetDate", d);
+    if (seasons[currentSeasonId]) seasons[currentSeasonId].meetDate = d;
+  }
+  closeModal();
+  await loadAll(); render();
+}
+
+async function confirmEndSeason() {
+  if (!confirm("이 시즌을 종료할까요?\n명예의 전당에 결과가 저장돼요.")) return;
+  closeModal();
+  await endSeason();
+}
+
+async function endSeason() {
+  // 명예의 전당 계산
+  const hall = {};
+
+  // MVP (기록일수 1위, 동점이면 칼로리 적은 사람)
+  const mvpData = members.map(m => {
+    const mEntries = entries.filter(e => e.member === m.name && e.calories > 0);
+    const days = new Set(mEntries.map(e => e.date)).size;
+    const kcal = mEntries.reduce((s, e) => s + e.calories, 0);
+    return { name: m.name, days, kcal };
+  }).filter(m => m.days > 0).sort((a,b) => b.days !== a.days ? b.days - a.days : a.kcal - b.kcal);
+  if (mvpData.length) hall.mvp = { name: mvpData[0].name, days: mvpData[0].days };
+
+  // 최장 스트릭
+  const streakData = members.map(m => ({ name: m.name, streak: calcStreak(m.name) }))
+    .sort((a,b) => b.streak - a.streak);
+  if (streakData.length && streakData[0].streak > 0) hall.streak = { name: streakData[0].name, streak: streakData[0].streak };
+
+  // 최다 기록일
+  const recordData = members.map(m => ({
+    name: m.name,
+    days: new Set(entries.filter(e => e.member === m.name).map(e => e.date)).size
+  })).sort((a,b) => b.days - a.days);
+  if (recordData.length && recordData[0].days > 0) hall.record = { name: recordData[0].name, days: recordData[0].days };
+
+  // Firebase에 저장
+  if (currentSeasonId === "default") {
+    await dbPut("hall", hall);
+  } else {
+    await dbPut("seasons/" + currentSeasonId + "/hall", hall);
+    await dbPut("seasons/" + currentSeasonId + "/ended", true);
+    if (seasons[currentSeasonId]) { seasons[currentSeasonId].ended = true; seasons[currentSeasonId].hall = hall; }
+  }
+  await loadAll(); render();
 }
 
 function switchSeason(id) {
@@ -1496,7 +1607,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason });
 
 start();
 </script>
