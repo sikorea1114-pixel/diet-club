@@ -366,7 +366,8 @@ function render() {
   const isWeek = mode === "week";
   const isVote = mode === "vote";
   const isNotice = mode === "notice";
-  const isCommunity = isVote || isNotice;
+  const isMukbang = mode === "mukbang";
+  const isCommunity = isVote || isNotice || isMukbang;
   const isRecord = !isCommunity;
   const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
@@ -435,6 +436,8 @@ function render() {
       '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
       (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
+      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="mukbang"?"var(--ink)":"var(--line)") + ';background:' + (mode==="mukbang"?"var(--ink)":"transparent") + ';color:' + (mode==="mukbang"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🍔 먹방왕' +
+      '</button>' +
       '</div>';
   }
 
@@ -452,7 +455,7 @@ function render() {
   html += '</header>';
 
   // 합계 카드 + 스트릭/MVP (투표/공지 모드 제외)
-  if (!isVote && !isNotice) {
+  if (!isVote && !isNotice && !isMukbang) {
 
     // 1. D-day 카드 (제일 위)
     if (!isMonth && !isWeek && view === "all" && meetDate) {
@@ -652,7 +655,7 @@ function render() {
   html += '</div>';
 
   // 리스트 (투표/공지 모드 제외)
-  if (!isVote && !isNotice) {
+  if (!isVote && !isNotice && !isMukbang) {
     html += '<div class="list">';
     if (!loaded) {
       html += '<div class="empty">불러오는 중…</div>';
@@ -732,12 +735,14 @@ function render() {
     html += renderVoteHtml();
   } else if (isNotice) {
     html += renderNoticeHtml();
+  } else if (isMukbang) {
+    html += renderMukbangHtml();
   }
 
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote && !isNotice && !isReadOnly) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isReadOnly) html += '<button class="fab" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
   if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
   if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
   if (isReadOnly) html += '<div style="position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
@@ -1293,6 +1298,72 @@ async function submitNewSeason() {
   seasons[id] = season;
   closeModal();
   switchSeason(id);
+}
+
+// ── 먹방왕 화면 ──
+function renderMukbangHtml() {
+  const wr = getWeekRange(new Date());
+  let html = '<div class="list" style="padding-bottom:100px">';
+  const weekData = members.map(m => {
+    const wEntries = entries.filter(e => {
+      const d = new Date(e.timestamp);
+      return d >= wr.start && d <= wr.end && e.member === m.name;
+    });
+    const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
+    const days = new Set(wEntries.map(e => e.date)).size;
+    return { name: m.name, kcal, days };
+  }).filter(m => m.kcal > 0).sort((a, b) => b.kcal - a.kcal);
+  if (weekData.length === 0) {
+    html += '<div class="empty">이번 주 기록이 없어요.</div></div>';
+    return html;
+  }
+  const medals = ['🥇','🥈','🥉'];
+  const king = weekData[0];
+  html += '<div class="card">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🍔 이번 주 먹방왕</div>';
+  html += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:14px;margin-bottom:16px">';
+  html += '<span style="font-size:32px">🍔</span>';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:17px;font-weight:800">' + esc(king.name) + ' 👑</div>';
+  html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">이번 주 ' + king.kcal.toLocaleString() + ' kcal · ' + king.days + '일 기록</div>';
+  html += '</div></div>';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">이번 주 칼로리 순위</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px">';
+  weekData.forEach((m, i) => {
+    const pct = Math.round(m.kcal / weekData[0].kcal * 100);
+    const medal = medals[i] || (i + 1) + '위';
+    html += '<div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+      '<span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
+      '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + m.kcal.toLocaleString() + ' kcal</span></div>';
+    html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+      '<div style="height:100%;width:' + pct + '%;background:' + (i === 0 ? '#E0726A' : colorOf(m.name)) + ';border-radius:99px"></div></div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+  const foodCount = {};
+  entries.filter(e => {
+    const d = new Date(e.timestamp);
+    return d >= wr.start && d <= wr.end;
+  }).forEach(e => {
+    const key = e.food.split('\n')[0].trim();
+    if (!foodCount[key]) foodCount[key] = { count: 0 };
+    foodCount[key].count++;
+  });
+  const topFoods = Object.entries(foodCount).sort((a,b) => b[1].count - a[1].count).slice(0, 5);
+  if (topFoods.length > 0) {
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🍽️ 이번 주 자주 먹은 음식 TOP' + topFoods.length + '</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    topFoods.forEach(([food, data], i) => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;font-weight:700">' + (i+1) + '. ' + esc(food) + '</span>' +
+        '<span style="font-size:13px;color:var(--muted);font-weight:700">' + data.count + '회</span></div>';
+    });
+    html += '</div></div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 // ── 투표 화면 ──
