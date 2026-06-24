@@ -201,12 +201,13 @@ let entries = [];
 let polls = {};
 let notices = {};
 let seasons = {};
-let currentSeasonId = "default"; // "default" = 기존 경로 (season-1)
+let currentSeasonId = "default";
 let date = new Date();
 let view = "all";
 let mode = "day";
 let loaded = false;
 let pollTimer = null;
+let cardCollapsed = { streak: true, mvp: true }; // 카드 접힌 상태 유지
 
 // 현재 시즌 DB 경로 prefix
 function seasonPath(sub) {
@@ -437,12 +438,46 @@ function render() {
     }
     html += '</div>';
 
-    // 스트릭 카드
+    // 오늘 현황 카드 (일별 + 전체 뷰 + 멤버 있을 때)
+    if (!isMonth && !isWeek && view === "all" && members.length > 0 && loaded) {
+      html += '<div class="card" style="margin-top:0">';
+      html += '<div class="sub">📋 오늘 현황</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
+      members.forEach(m => {
+        const hasTodayRecord = dayEntries.some(e => e.member === m.name);
+        if (hasTodayRecord) {
+          const todayKcal = dayEntries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
+          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + '</span>' +
+            '<span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
+            '</div>';
+        } else {
+          // 연속 미기록 일수 계산
+          let missDay = 1;
+          const d = new Date(); d.setDate(d.getDate() - 1);
+          while (missDay < 30) {
+            const key = fmtKey(d);
+            const hasRecord = entries.some(e => e.member === m.name && e.date === key);
+            if (hasRecord) break;
+            missDay++;
+            d.setDate(d.getDate() - 1);
+          }
+          const emoji = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
+          const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
+          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji + ' ' + esc(m.name) + '</span>' +
+            '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span>' +
+            '</div>';
+        }
+      });
+      html += '</div></div>';
+    }
     if (view === "all" && members.length > 0 && loaded) {
       const streaks = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).filter(s => s.streak > 0);
       if (streaks.length > 0) {
         html += '<div class="card" style="margin-top:0">';
-        html += '<div class="sub">🔥 연속 기록 스트릭</div>';
+        html += '<div class="sub" onclick="toggleWeekDay(\'streak-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🔥 연속 기록 스트릭<span id="streak-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.streak ? '▼' : '▲') + '</span></div>';
+        html += '<div id="streak-card" style="display:' + (cardCollapsed.streak ? 'none' : 'block') + '">';
         html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
         streaks.sort((a,b) => b.streak - a.streak).forEach(s => {
           const flames = s.streak >= 7 ? '🔥🔥🔥' : s.streak >= 3 ? '🔥🔥' : '🔥';
@@ -451,7 +486,7 @@ function render() {
             '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + flames + ' ' + s.streak + '일 연속</span>' +
             '</div>';
         });
-        html += '</div></div>';
+        html += '</div></div></div>';
       }
 
       // MVP 카드
@@ -470,7 +505,8 @@ function render() {
         mvpData.sort((a, b) => b.days !== a.days ? b.days - a.days : a.kcal - b.kcal);
         const mvp = mvpData[0];
         html += '<div class="card" style="margin-top:0">';
-        html += '<div class="sub">🏆 이번 주 MVP</div>';
+        html += '<div class="sub" onclick="toggleWeekDay(\'mvp-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🏆 이번 주 MVP<span id="mvp-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.mvp ? '▼' : '▲') + '</span></div>';
+        html += '<div id="mvp-card" style="display:' + (cardCollapsed.mvp ? 'none' : 'block') + '">';
         html += '<div style="display:flex;align-items:center;gap:12px;margin-top:12px">';
         const mc = colorOf(mvp.name);
         html += '<span style="width:46px;height:46px;border-radius:14px;background:' + mc + '22;color:' + mc + ';display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
@@ -489,7 +525,7 @@ function render() {
           });
           html += '</div>';
         }
-        html += '</div>';
+        html += '</div></div>';
       }
     }
   }
@@ -932,6 +968,8 @@ function toggleWeekDay(uid) {
   const isOpen = el.style.display !== "none";
   el.style.display = isOpen ? "none" : "block";
   if (arrow) arrow.textContent = isOpen ? "▼" : "▲";
+  if (uid === "streak-card") cardCollapsed.streak = isOpen;
+  if (uid === "mvp-card") cardCollapsed.mvp = isOpen;
 }
 
 function toggleEntry(el) {
