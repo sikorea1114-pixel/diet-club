@@ -753,17 +753,39 @@ function submitAdd() {
 // ── 멤버 추가 팝업 ──
 function openMember() {
   const m = document.getElementById("modal");
+  let memberList = '';
+  if (members.length > 0) {
+    memberList = '<div style="margin-bottom:16px">' +
+      '<div class="sub" style="margin-bottom:8px">현재 멤버</div>' +
+      members.map(mem =>
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">' +
+        '<span style="font-size:14px;font-weight:700">' + esc(avatarOf(mem.name)) + ' ' + esc(mem.name) + '</span>' +
+        '<button onclick="deleteMember(\'' + esc(mem.name) + '\')" style="border:none;background:transparent;color:#E0726A;font-size:12px;font-weight:700;padding:4px 8px">삭제</button>' +
+        '</div>'
+      ).join("") +
+      '</div>';
+  }
   m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
-    '<h2 style="margin-bottom:16px">멤버 추가</h2>' +
+    '<div class="phead"><h2>멤버 관리</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    memberList +
+    '<div class="sub" style="margin-bottom:8px">멤버 추가</div>' +
     '<input class="ti" id="m-name" placeholder="이름 또는 닉네임" />' +
-    '<button class="save" id="m-save" onclick="submitMember()">추가하기</button>' +
+    '<button class="save" id="m-save" onclick="submitMember()" disabled>추가하기</button>' +
     '</div></div>';
   const inp = document.getElementById("m-name");
   const upd = () => { document.getElementById("m-save").disabled = !inp.value.trim(); };
   inp.addEventListener("input", upd);
   inp.addEventListener("keydown", e => { if (e.key === "Enter") submitMember(); });
-  upd();
   setTimeout(() => inp.focus(), 250);
+}
+
+async function deleteMember(name) {
+  if (!confirm(name + " 님을 삭제할까요?\n해당 멤버의 기록은 유지돼요.")) return;
+  members = members.filter(m => m.name !== name);
+  if (view === name) view = "all";
+  await dbPut(seasonPath("members"), members);
+  closeModal();
+  await loadAll(); render();
 }
 function submitMember() {
   const v = document.getElementById("m-name").value;
@@ -1453,7 +1475,7 @@ function calcStreak(memberName) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember });
 
 start();
 </script>
