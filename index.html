@@ -461,15 +461,22 @@ function render() {
       const diff = Math.round((meet - today) / 86400000);
       if (diff >= 0) {
         const isToday = diff === 0;
-        html += '<div class="card" style="background:' + (isToday ? 'var(--accent)' : 'var(--surface)') + '">';
+        const isTomorrow = diff === 1;
+        const bg = isToday ? 'var(--accent)' : isTomorrow ? '#E0726A' : 'var(--surface)';
+        const textColor = (isToday || isTomorrow) ? '#fff' : 'var(--ink)';
+        const subColor = (isToday || isTomorrow) ? 'rgba(255,255,255,.8)' : 'var(--muted)';
+        const dateColor = (isToday || isTomorrow) ? 'rgba(255,255,255,.7)' : 'var(--muted)';
+        const emoji = isToday ? '🎊' : isTomorrow ? '😤' : '🏃🏻';
+        const label = isToday ? '🎉 오늘이에요!' : isTomorrow ? '😤 내일 모임이에요!' : 'D-' + diff;
+        const sub = isTomorrow ? '오늘 잘 먹어요 💪' : '다음 모임';
+        html += '<div class="card" style="background:' + bg + '">';
         html += '<div style="display:flex;align-items:center;justify-content:space-between">';
         html += '<div>';
-        html += '<div style="font-size:13px;font-weight:700;color:' + (isToday ? 'rgba(255,255,255,.8)' : 'var(--muted)') + '">다음 모임</div>';
-        html += '<div style="font-size:22px;font-weight:900;color:' + (isToday ? '#fff' : 'var(--ink)') + ';margin-top:2px">' +
-          (isToday ? '🎉 오늘이에요!' : 'D-' + diff) + '</div>';
-        html += '<div style="font-size:12px;color:' + (isToday ? 'rgba(255,255,255,.7)' : 'var(--muted)') + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div>';
+        html += '<div style="font-size:13px;font-weight:700;color:' + subColor + '">' + sub + '</div>';
+        html += '<div style="font-size:22px;font-weight:900;color:' + textColor + ';margin-top:2px">' + label + '</div>';
+        html += '<div style="font-size:12px;color:' + dateColor + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div>';
         html += '</div>';
-        html += '<div style="font-size:48px">' + (isToday ? '🎊' : '🏃🏻') + '</div>';
+        html += '<div style="font-size:48px">' + emoji + '</div>';
         html += '</div></div>';
       }
     }
@@ -497,12 +504,17 @@ function render() {
             missDay++;
             d.setDate(d.getDate() - 1);
           }
+          const yesterdayKey = fmtKey(new Date(Date.now() - 86400000));
+          const hadStreak = missDay === 2 && entries.some(e => e.member === m.name && e.date === fmtKey(new Date(Date.now() - 86400000 * 2)));
+          const prevStreak = hadStreak ? calcStreakAt(m.name, fmtKey(new Date(Date.now() - 86400000 * 2))) + 1 : 0;
           const emoji = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
           const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
           html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
             '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji + ' ' + esc(m.name) + '</span>' +
+            '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">' +
             '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span>' +
-            '</div>';
+            (missDay === 2 && prevStreak >= 2 ? '<span style="font-size:11px;color:var(--muted)">😢 ' + prevStreak + '일 스트릭 끊겼어요</span>' : '') +
+            '</div></div>';
         }
       });
       html += '</div></div>';
@@ -1601,6 +1613,23 @@ function calcStreak(memberName) {
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
   let streak = 1;
   for (let i = 1; i < dates.length; i++) {
+    const prev = new Date(dates[i-1]);
+    const curr = new Date(dates[i]);
+    const diff = (prev - curr) / 86400000;
+    if (diff === 1) streak++;
+    else break;
+  }
+  return streak;
+}
+
+function calcStreakAt(memberName, baseDate) {
+  const dates = [...new Set(
+    entries.filter(e => e.member === memberName).map(e => e.date)
+  )].sort().reverse();
+  if (!dates.length || !dates.includes(baseDate)) return 0;
+  const idx = dates.indexOf(baseDate);
+  let streak = 1;
+  for (let i = idx + 1; i < dates.length; i++) {
     const prev = new Date(dates[i-1]);
     const curr = new Date(dates[i]);
     const diff = (prev - curr) / 86400000;
