@@ -207,7 +207,7 @@ let view = "all";
 let mode = "day";
 let loaded = false;
 let pollTimer = null;
-let cardCollapsed = { streak: true, mvp: true };
+let cardCollapsed = { streak: true, mvp: true, summary: true };
 let pledges = {};
 let meetDate = "";
 let hall = null;
@@ -453,24 +453,28 @@ function render() {
 
   // 합계 카드 + 스트릭/MVP (투표/공지 모드 제외)
   if (!isVote && !isNotice) {
-    html += '<div class="card">';
-    html += '<div class="sub">' + (isMonth
-      ? (view==="all" ? "이번 달 모임 전체" : "이번 달 " + esc(view) + " 님")
-      : (view==="all" ? "모임 전체 섭취량" : esc(view) + " 님 섭취량")) + '</div>';
-    html += '<div class="big"><b class="tnum">' + totalKcal.toLocaleString() + '</b><span>kcal</span></div>';
-    if (isMonth) html += '<div class="avg tnum">기록한 ' + monthGroups.length + '일 · 하루 평균 ' + monthAvg.toLocaleString() + ' kcal</div>';
-    if (view === "all" && perMember.length) {
-      html += '<div class="bars">';
-      perMember.forEach(p => {
-        html += '<div class="bar"><span class="nm">' + esc(p.name) + '</span>' +
-          '<div class="track"><div class="fill" style="width:' + (p.kcal/maxKcal*100) + '%;background:' + colorOf(p.name) + '"></div></div>' +
-          '<span class="kc tnum" style="color:' + (p.kcal?"var(--ink)":"var(--faint)") + '">' + p.kcal.toLocaleString() + '</span></div>';
-      });
-      html += '</div>';
-    }
-    html += '</div>';
 
-    // 오늘 현황 카드 (일별 + 전체 뷰 + 멤버 있을 때)
+    // 1. D-day 카드 (제일 위)
+    if (!isMonth && !isWeek && view === "all" && meetDate) {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const meet = new Date(meetDate); meet.setHours(0,0,0,0);
+      const diff = Math.round((meet - today) / 86400000);
+      if (diff >= 0) {
+        const isToday = diff === 0;
+        html += '<div class="card" style="background:' + (isToday ? 'var(--accent)' : 'var(--surface)') + '">';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+        html += '<div>';
+        html += '<div style="font-size:13px;font-weight:700;color:' + (isToday ? 'rgba(255,255,255,.8)' : 'var(--muted)') + '">다음 모임</div>';
+        html += '<div style="font-size:22px;font-weight:900;color:' + (isToday ? '#fff' : 'var(--ink)') + ';margin-top:2px">' +
+          (isToday ? '🎉 오늘이에요!' : 'D-' + diff) + '</div>';
+        html += '<div style="font-size:12px;color:' + (isToday ? 'rgba(255,255,255,.7)' : 'var(--muted)') + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div>';
+        html += '</div>';
+        html += '<div style="font-size:48px">' + (isToday ? '🎊' : '🏃🏻') + '</div>';
+        html += '</div></div>';
+      }
+    }
+
+    // 2. 오늘 현황 카드
     if (!isMonth && !isWeek && view === "all" && members.length > 0 && loaded) {
       html += '<div class="card" style="margin-top:0">';
       html += '<div class="sub">📋 오늘 현황</div>';
@@ -484,7 +488,6 @@ function render() {
             '<span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
             '</div>';
         } else {
-          // 연속 미기록 일수 계산
           let missDay = 1;
           const d = new Date(); d.setDate(d.getDate() - 1);
           while (missDay < 30) {
@@ -505,43 +508,7 @@ function render() {
       html += '</div></div>';
     }
 
-    // D-day 카드
-    if (!isMonth && !isWeek && view === "all" && meetDate) {
-      const today = new Date(); today.setHours(0,0,0,0);
-      const meet = new Date(meetDate); meet.setHours(0,0,0,0);
-      const diff = Math.round((meet - today) / 86400000);
-      if (diff >= 0) {
-        const isToday = diff === 0;
-        html += '<div class="card" style="margin-top:0;background:' + (isToday ? 'var(--accent)' : 'var(--surface)') + '">';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between">';
-        html += '<div>';
-        html += '<div style="font-size:13px;font-weight:700;color:' + (isToday ? 'rgba(255,255,255,.8)' : 'var(--muted)') + '">다음 모임</div>';
-        html += '<div style="font-size:22px;font-weight:900;color:' + (isToday ? '#fff' : 'var(--ink)') + ';margin-top:2px">' +
-          (isToday ? '🎉 오늘이에요!' : 'D-' + diff) + '</div>';
-        html += '<div style="font-size:12px;color:' + (isToday ? 'rgba(255,255,255,.7)' : 'var(--muted)') + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div>';
-        html += '</div>';
-        if (!isToday) html += '<div style="font-size:48px">🏃🏻</div>';
-        else html += '<div style="font-size:48px">🎊</div>';
-        html += '</div></div>';
-      }
-    }
-
-    // 명예의 전당 (종료된 시즌 조회 시)
-    if (isReadOnly && hall) {
-      html += '<div class="card" style="margin-top:0">';
-      html += '<div class="sub">🏆 명예의 전당</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">';
-      if (hall.mvp) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:14px;color:var(--muted);font-weight:700">👑 시즌 MVP</span>' +
-        '<span style="font-size:15px;font-weight:800">' + esc(hall.mvp.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.mvp.days + '일 기록</span></span></div>';
-      if (hall.streak) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:14px;color:var(--muted);font-weight:700">🔥 최장 스트릭</span>' +
-        '<span style="font-size:15px;font-weight:800">' + esc(hall.streak.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.streak.streak + '일 연속</span></span></div>';
-      if (hall.record) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:14px;color:var(--muted);font-weight:700">📋 최다 기록</span>' +
-        '<span style="font-size:15px;font-weight:800">' + esc(hall.record.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.record.days + '일</span></span></div>';
-      html += '</div></div>';
-    }
+    // 3. 오늘의 다짐 카드
     if (!isMonth && !isWeek && members.length > 0 && loaded) {
       html += '<div class="card" style="margin-top:0">';
       html += '<div class="sub">💬 오늘의 다짐</div>';
@@ -564,6 +531,42 @@ function render() {
         '<button onclick="submitPledge()" ' + (view === "all" ? 'disabled ' : '') + 'style="padding:0 16px;border-radius:12px;border:none;background:' + (view === "all" ? 'var(--faint)' : 'var(--accent)') + ';color:#fff;font-size:13px;font-weight:800">저장</button>' +
         '</div>';
       html += '</div>';
+    }
+
+    // 4. 합계 카드 (접힌 상태 기본)
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div class="sub" onclick="toggleWeekDay(\'summary-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
+      (isMonth ? (view==="all" ? "이번 달 모임 전체" : "이번 달 " + esc(view) + " 님") : (view==="all" ? "모임 전체 섭취량" : esc(view) + " 님 섭취량")) +
+      '<span id="summary-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.summary ? '▼' : '▲') + '</span></div>';
+    html += '<div id="summary-card" style="display:' + (cardCollapsed.summary ? 'none' : 'block') + '">';
+    html += '<div class="big"><b class="tnum">' + totalKcal.toLocaleString() + '</b><span>kcal</span></div>';
+    if (isMonth) html += '<div class="avg tnum">기록한 ' + monthGroups.length + '일 · 하루 평균 ' + monthAvg.toLocaleString() + ' kcal</div>';
+    if (view === "all" && perMember.length) {
+      html += '<div class="bars">';
+      perMember.forEach(p => {
+        html += '<div class="bar"><span class="nm">' + esc(p.name) + '</span>' +
+          '<div class="track"><div class="fill" style="width:' + (p.kcal/maxKcal*100) + '%;background:' + colorOf(p.name) + '"></div></div>' +
+          '<span class="kc tnum" style="color:' + (p.kcal?"var(--ink)":"var(--faint)") + '">' + p.kcal.toLocaleString() + '</span></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div></div>';
+
+    // 명예의 전당 (종료된 시즌)
+    if (isReadOnly && hall) {
+      html += '<div class="card" style="margin-top:0">';
+      html += '<div class="sub">🏆 명예의 전당</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">';
+      if (hall.mvp) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">👑 시즌 MVP</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.mvp.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.mvp.days + '일 기록</span></span></div>';
+      if (hall.streak) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">🔥 최장 스트릭</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.streak.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.streak.streak + '일 연속</span></span></div>';
+      if (hall.record) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">📋 최다 기록</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.record.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.record.days + '일</span></span></div>';
+      html += '</div></div>';
     }
 
     if (view === "all" && members.length > 0 && loaded) {
@@ -1138,6 +1141,7 @@ function toggleWeekDay(uid) {
   if (arrow) arrow.textContent = isOpen ? "▼" : "▲";
   if (uid === "streak-card") cardCollapsed.streak = isOpen;
   if (uid === "mvp-card") cardCollapsed.mvp = isOpen;
+  if (uid === "summary-card") cardCollapsed.summary = isOpen;
 }
 
 function toggleEntry(el) {
