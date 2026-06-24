@@ -867,6 +867,7 @@ async function start() {
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     if (document.getElementById("modal").innerHTML) return;
+    if (document.activeElement && document.activeElement.id === "pledge-input") return;
     try { await loadAll(); render(); } catch (e) {}
   }, 5000);
 }
