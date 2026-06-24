@@ -516,9 +516,19 @@ function render() {
     } else if (isMonth) {
       if (monthGroups.length === 0) html += '<div class="empty">이번 달 기록이 없어요.</div>';
       else monthGroups.forEach(g => {
-        html += '<div class="group"><div class="ghead"><b>' + fmtDateHeader(g.date) + '</b><span class="tnum">' + g.total.toLocaleString() + ' kcal</span></div><div class="col tight">';
+        const isToday = g.date === fmtKey(new Date());
+        const uid = "month-" + g.date;
+        html += '<div class="group">';
+        html += '<div class="ghead" onclick="toggleWeekDay(\'' + uid + '\')" style="cursor:pointer">' +
+          '<b>' + fmtDateHeader(g.date) + (isToday ? ' <span style="color:var(--accent);font-size:11px;font-weight:800">오늘</span>' : '') + '</b>' +
+          '<span style="display:flex;align-items:center;gap:8px">' +
+          '<span class="tnum">' + g.total.toLocaleString() + ' kcal</span>' +
+          '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday ? '▲' : '▼') + '</span>' +
+          '</span></div>';
+        html += '<div id="' + uid + '" style="display:' + (isToday ? 'block' : 'none') + '">';
+        html += '<div class="col tight">';
         g.items.forEach(e => html += entryCard(e));
-        html += '</div></div>';
+        html += '</div></div></div>';
       });
     } else if (isWeek) {
       if (weekEntries.length === 0) {
