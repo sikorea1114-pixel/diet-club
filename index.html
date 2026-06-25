@@ -2717,7 +2717,9 @@ function openExercise() {
     '<input class="ti num" id="ex-weight" inputmode="decimal" value="' + myWeight + '" style="flex:1" />' +
     '<span style="font-size:15px;font-weight:700;color:var(--muted)">kg</span></div>' +
     '<label class="flabel">날짜</label>' +
-    '<input type="date" class="ti" id="ex-date" value="' + fmtKey(new Date()) + '" style="margin:0;width:100%;box-sizing:border-box;display:block" />' +
+    '<div style="width:100%;overflow:hidden;box-sizing:border-box">' +
+    '<input type="date" id="ex-date" value="' + fmtKey(new Date()) + '" style="width:100%;box-sizing:border-box;padding:15px 16px;font-size:16px;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--ink);outline:none;font-weight:600;display:block;-webkit-appearance:none;appearance:none;min-width:0" />' +
+    '</div>' +
     '<label class="flabel">운동 종류</label>' +
     '<select class="ti" id="ex-type">' + opts + '</select>' +
     '<label class="flabel">시간 (분)</label>' +
