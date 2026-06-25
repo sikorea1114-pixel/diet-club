@@ -376,7 +376,8 @@ function render() {
   const isVote = mode === "vote";
   const isNotice = mode === "notice";
   const isMukbang = mode === "mukbang";
-  const isCommunity = isVote || isNotice || isMukbang;
+  const isAI = mode === "ai";
+  const isCommunity = isVote || isNotice || isMukbang || isAI;
   const isRecord = !isCommunity;
   const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
@@ -445,6 +446,7 @@ function render() {
       '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
       (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
+      '<button onclick="setMode(\'ai\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="ai"?"var(--ink)":"var(--line)") + ';background:' + (mode==="ai"?"var(--ink)":"transparent") + ';color:' + (mode==="ai"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🤖 AI</button>' +
       '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="mukbang"?"var(--ink)":"var(--line)") + ';background:' + (mode==="mukbang"?"var(--ink)":"transparent") + ';color:' + (mode==="mukbang"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🏆 랭킹' +
       '</button>' +
       '</div>';
@@ -781,13 +783,15 @@ function render() {
     html += renderNoticeHtml();
   } else if (isMukbang) {
     html += renderMukbangHtml();
+  } else if (isAI) {
+    html += renderAIHtml();
   }
 
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote && !isNotice && !isMukbang && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:170px">' + iconPlus(20) + ' 먹은 거 적기</button>';
-  if (members.length && !isVote && !isNotice && !isMukbang && !isReadOnly) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:170px">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isReadOnly) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
   if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
   if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
   if (isReadOnly) html += '<div style="position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
@@ -3302,6 +3306,122 @@ function renderHealthCard() {
   return html;
 }
 
+// ── AI 채팅 ──
+let aiHistory = [];
+let aiTyping = false;
+
+function getGeminiKey() {
+  try { return localStorage.getItem("dietclub_gemini_key") || ""; } catch { return ""; }
+}
+function saveGeminiKey(k) {
+  try { localStorage.setItem("dietclub_gemini_key", k); } catch {}
+}
+
+function renderAIHtml() {
+  const key = getGeminiKey();
+  let html = '<div class="list" style="padding-bottom:180px">';
+  if (!key) {
+    html += '<div class="card">' +
+      '<div style="font-size:16px;font-weight:800;margin-bottom:8px">🤖 AI 다이어트 상담</div>' +
+      '<div style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">Gemini API 키를 입력하면 AI와 다이어트 상담을 할 수 있어요.<br>키는 내 기기에만 저장돼요.</div>' +
+      '<label class="flabel">Gemini API 키</label>' +
+      '<input class="ti" id="gemini-key-input" type="password" placeholder="AIza..." />' +
+      '<button class="save" onclick="saveGeminiKeyAndRender()" style="margin-top:12px">저장하고 시작하기</button>' +
+      '</div>';
+    html += '</div>';
+    return html;
+  }
+  const todayKey = fmtKey(new Date());
+  const todayEntries = entries.filter(e => e.date === todayKey);
+  const todayKcal = todayEntries.reduce((s,e) => s + e.calories, 0);
+  const todayBurned = exercises.filter(e => e.date === todayKey).reduce((s,e) => s + e.burned, 0);
+  html += '<div class="card" style="margin-bottom:8px;padding:12px 16px">';
+  html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px">🤖 AI 다이어트 상담</div>';
+  html += '<div style="font-size:12px;color:var(--faint)">오늘 ' + todayKcal.toLocaleString() + ' kcal' + (todayBurned > 0 ? ' · 운동 -' + todayBurned.toLocaleString() + ' kcal' : '') + ' 기준으로 상담해요</div>';
+  html += '<div style="margin-top:8px;display:flex;gap:10px">';
+  html += '<button onclick="resetAIChat()" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:0">대화 초기화</button>';
+  html += '<button onclick="changeGeminiKey()" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:0">키 변경</button>';
+  html += '</div></div>';
+  html += '<div id="ai-chat-box" style="display:flex;flex-direction:column;gap:10px;padding:0 0 16px">';
+  if (aiHistory.length === 0) {
+    html += '<div style="text-align:center;padding:24px;color:var(--muted);font-size:14px">안녕하세요! 다이어트 관련 뭐든 물어보세요 😊</div>';
+  }
+  aiHistory.forEach(msg => {
+    const isUser = msg.role === "user";
+    html += '<div style="display:flex;justify-content:' + (isUser ? 'flex-end' : 'flex-start') + '">';
+    html += '<div style="max-width:80%;padding:12px 16px;border-radius:' + (isUser ? '18px 18px 4px 18px' : '18px 18px 18px 4px') + ';background:' + (isUser ? 'var(--accent)' : 'var(--surface)') + ';color:' + (isUser ? '#fff' : 'var(--ink)') + ';font-size:14px;line-height:1.6;border:1px solid ' + (isUser ? 'transparent' : 'var(--line)') + ';white-space:pre-wrap">' + esc(msg.displayText || msg.parts[0].text) + '</div>';
+    html += '</div>';
+  });
+  if (aiTyping) {
+    html += '<div style="display:flex;justify-content:flex-start"><div style="padding:12px 16px;border-radius:18px 18px 18px 4px;background:var(--surface);border:1px solid var(--line);font-size:20px">💭</div></div>';
+  }
+  html += '</div>';
+  html += '<div style="position:fixed;bottom:100px;left:50%;transform:translateX(-50%);width:calc(100% - 44px);max-width:436px;display:flex;gap:8px;background:var(--bg);padding:8px 0">';
+  html += '<input class="ti" id="ai-input" placeholder="다이어트 질문을 입력하세요..." style="flex:1;margin:0;font-size:15px" onkeydown="if(event.key==\'Enter\')sendAIMessage()" />';
+  html += '<button onclick="sendAIMessage()" style="padding:0 18px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:20px;flex-shrink:0">↑</button>';
+  html += '</div>';
+  html += '</div>';
+  return html;
+}
+
+function saveGeminiKeyAndRender() {
+  const k = document.getElementById("gemini-key-input").value.trim();
+  if (!k) { alert("키를 입력해주세요!"); return; }
+  saveGeminiKey(k);
+  render();
+}
+function changeGeminiKey() { saveGeminiKey(""); aiHistory = []; render(); }
+function resetAIChat() { aiHistory = []; render(); }
+
+async function sendAIMessage() {
+  const input = document.getElementById("ai-input");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text || aiTyping) return;
+  const key = getGeminiKey();
+  if (!key) return;
+  const todayKey = fmtKey(new Date());
+  const todayEntries = entries.filter(e => e.date === todayKey);
+  const todayKcal = todayEntries.reduce((s,e) => s + e.calories, 0);
+  const todayBurned = exercises.filter(e => e.date === todayKey).reduce((s,e) => s + e.burned, 0);
+  const netKcal = todayKcal - todayBurned;
+  const memberName = view !== "all" ? view : "멤버";
+  const isFirst = aiHistory.length === 0;
+  const systemCtx = isFirst
+    ? "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
+      "현재 사용자: " + memberName + "\n" +
+      "오늘 섭취: " + todayKcal + "kcal / 운동 소모: " + todayBurned + "kcal / 순칼로리: " + netKcal + "kcal\n" +
+      "오늘 먹은 것: " + (todayEntries.map(e => e.food + "(" + e.calories + "kcal)").join(", ") || "없음") + "\n" +
+      "짧고 친근하게 한국어로 답변해요. 이모지 적절히 사용해요.\n\n"
+    : "";
+  const apiText = systemCtx + text;
+  // 표시용 (시스템 컨텍스트 제외)
+  aiHistory.push({ role: "user", parts: [{ text: apiText }], displayText: text });
+  aiTyping = true;
+  input.value = "";
+  render();
+  setTimeout(() => { const box = document.getElementById("ai-chat-box"); if (box) box.scrollIntoView({ behavior:"smooth", block:"end" }); }, 100);
+  try {
+    const payload = { contents: aiHistory.map(m => ({ role: m.role, parts: [{ text: m.parts[0].text }] })) };
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + key,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "답변을 가져오지 못했어요.";
+    aiHistory.push({ role: "model", parts: [{ text: reply }], displayText: reply });
+  } catch(e) {
+    aiHistory.push({ role: "model", parts: [{ text: "오류: " + e.message }], displayText: "오류: " + e.message });
+  }
+  aiTyping = false;
+  render();
+  setTimeout(() => {
+    const box = document.getElementById("ai-chat-box"); if (box) box.scrollIntoView({ behavior:"smooth", block:"end" });
+    const inp = document.getElementById("ai-input"); if (inp) inp.focus();
+  }, 100);
+}
+
 // ── 투표 화면 ──
 function renderVoteHtml() {
   const pollList = Object.values(polls);
@@ -3647,7 +3767,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openMyProfile, pickGender, submitMyProfile });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage });
 
 start();
 </script>
