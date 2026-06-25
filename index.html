@@ -2714,6 +2714,8 @@ function openExercise() {
     '<div style="display:flex;align-items:center;gap:8px">' +
     '<input class="ti num" id="ex-weight" inputmode="decimal" value="' + myWeight + '" style="flex:1" />' +
     '<span style="font-size:15px;font-weight:700;color:var(--muted)">kg</span></div>' +
+    '<label class="flabel">날짜</label>' +
+    '<input type="date" class="ti" id="ex-date" value="' + fmtKey(new Date()) + '" style="margin:0" />' +
     '<label class="flabel">운동 종류</label>' +
     '<select class="ti" id="ex-type">' + opts + '</select>' +
     '<label class="flabel">시간 (분)</label>' +
@@ -2758,12 +2760,13 @@ async function submitExercise() {
   const mins = parseInt(document.getElementById("ex-min").value) || 0;
   if (!mins) { alert("시간을 입력해주세요!"); return; }
   const weight = parseFloat(document.getElementById("ex-weight").value) || 60;
+  const exDate = document.getElementById("ex-date").value || fmtKey(new Date());
   const idx = parseInt(document.getElementById("ex-type").value);
   const ex = EXERCISE_DB[idx];
   const burned = Math.round(ex.met * weight * (mins / 60));
   saveMyWeight(name, weight);
   const id = "ex-" + Date.now();
-  const data = { id, member: name, type: ex.k, minutes: mins, burned, met: ex.met, date: fmtKey(new Date()), timestamp: Date.now() };
+  const data = { id, member: name, type: ex.k, minutes: mins, burned, met: ex.met, date: exDate, timestamp: Date.now() };
   await dbPut(seasonPath("exercises") + "/" + id, data);
   exercises.push(data);
   closeModal();
