@@ -2724,6 +2724,84 @@ function getMyWeight(name) {
 function saveMyWeight(name, w) {
   try { localStorage.setItem("dietclub_weight_" + (name || ""), w); } catch {}
 }
+function getMyProfile(name) {
+  try {
+    const raw = localStorage.getItem("dietclub_profile_" + (name || ""));
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function saveMyProfile(name, profile) {
+  try { localStorage.setItem("dietclub_profile_" + (name || ""), JSON.stringify(profile)); } catch {}
+}
+function calcBMR(profile) {
+  // 해리스-베네딕트 공식
+  const { gender, age, height, weight } = profile;
+  if (gender === "male") return 88.362 + (13.397 * weight) + (4.799 * height) - (5.677 * age);
+  else return 447.593 + (9.247 * weight) + (3.098 * height) - (4.330 * age);
+}
+function calcTDEE(profile) {
+  const bmr = calcBMR(profile);
+  const activityMap = { 1: 1.2, 2: 1.375, 3: 1.55, 4: 1.725 };
+  return Math.round(bmr * (activityMap[profile.activity] || 1.375));
+}
+function openMyProfile() {
+  const name = view !== "all" ? view : null;
+  if (!name) { alert("이름을 먼저 선택해주세요!"); return; }
+  const p = getMyProfile(name) || {};
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>내 신체정보</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;padding:10px 12px;background:var(--bg);border-radius:10px">🔒 이 정보는 내 기기에만 저장돼요. 다른 멤버에게 보이지 않아요.</div>' +
+    '<label class="flabel">성별</label>' +
+    '<div style="display:flex;gap:8px;margin-bottom:16px">' +
+    '<button id="gender-male" onclick="pickGender(\'male\')" style="flex:1;padding:12px;border-radius:12px;border:1px solid ' + (p.gender==='male'?'var(--accent)':'var(--line)') + ';background:' + (p.gender==='male'?'var(--accent-soft)':'transparent') + ';font-size:14px;font-weight:700">남성</button>' +
+    '<button id="gender-female" onclick="pickGender(\'female\')" style="flex:1;padding:12px;border-radius:12px;border:1px solid ' + (p.gender==='female'?'var(--accent)':'var(--line)') + ';background:' + (p.gender==='female'?'var(--accent-soft)':'transparent') + ';font-size:14px;font-weight:700">여성</button>' +
+    '</div>' +
+    '<label class="flabel">나이</label>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">' +
+    '<input class="ti num" id="profile-age" inputmode="numeric" value="' + (p.age||'') + '" style="flex:1" />' +
+    '<span style="font-size:15px;font-weight:700;color:var(--muted)">세</span></div>' +
+    '<label class="flabel">키</label>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">' +
+    '<input class="ti num" id="profile-height" inputmode="numeric" value="' + (p.height||'') + '" style="flex:1" />' +
+    '<span style="font-size:15px;font-weight:700;color:var(--muted)">cm</span></div>' +
+    '<label class="flabel">체중</label>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">' +
+    '<input class="ti num" id="profile-weight" inputmode="decimal" value="' + (p.weight||getMyWeight(name)) + '" style="flex:1" />' +
+    '<span style="font-size:15px;font-weight:700;color:var(--muted)">kg</span></div>' +
+    '<label class="flabel">활동량</label>' +
+    '<select class="ti" id="profile-activity" style="margin-bottom:16px">' +
+    '<option value="1" ' + (p.activity==1?'selected':'') + '>🛋️ 거의 안 움직임</option>' +
+    '<option value="2" ' + (p.activity==2||!p.activity?'selected':'') + '>🚶 가벼운 활동 (주 1-3회)</option>' +
+    '<option value="3" ' + (p.activity==3?'selected':'') + '>🏃 보통 활동 (주 3-5회)</option>' +
+    '<option value="4" ' + (p.activity==4?'selected':'') + '>💪 활발한 활동 (주 6-7회)</option>' +
+    '</select>' +
+    '<button class="save" onclick="submitMyProfile(\'' + name + '\')">' + iconCheck() + ' 저장하기</button>' +
+    '</div></div>';
+  window._profileGender = p.gender || null;
+}
+function pickGender(g) {
+  window._profileGender = g;
+  ['male','female'].forEach(s => {
+    const btn = document.getElementById('gender-' + s);
+    if (!btn) return;
+    btn.style.borderColor = s === g ? 'var(--accent)' : 'var(--line)';
+    btn.style.background = s === g ? 'var(--accent-soft)' : 'transparent';
+  });
+}
+function submitMyProfile(name) {
+  const age = parseInt(document.getElementById('profile-age').value) || 0;
+  const height = parseFloat(document.getElementById('profile-height').value) || 0;
+  const weight = parseFloat(document.getElementById('profile-weight').value) || 0;
+  const activity = parseInt(document.getElementById('profile-activity').value) || 2;
+  const gender = window._profileGender;
+  if (!gender || !age || !height || !weight) { alert('모든 항목을 입력해주세요!'); return; }
+  const profile = { gender, age, height, weight, activity };
+  saveMyProfile(name, profile);
+  saveMyWeight(name, weight);
+  closeModal();
+  render();
+}
 
 function openExercise() {
   addMemberSel = view === "all" ? (members[0] && members[0].name) : view;
@@ -3085,6 +3163,67 @@ function renderMukbangHtml() {
     html += '</div></div>';
   }
 
+  html += renderHealthCard();
+  html += '</div>';
+  return html;
+}
+
+function renderHealthCard() {
+  const todayKey = fmtKey(new Date());
+  let html = '<div class="card" style="margin-top:0">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted)">🎯 오늘 권장칼로리 달성</div>';
+  if (view !== "all") {
+    html += '<button onclick="openMyProfile()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:800;padding:5px 10px;border-radius:8px">내 정보 설정</button>';
+  }
+  html += '</div>';
+  const rows = members.map(m => {
+    const profile = getMyProfile(m.name);
+    const todayEntries = entries.filter(e => e.member === m.name && e.date === todayKey);
+    const todayKcal = todayEntries.reduce((s,e) => s + e.calories, 0);
+    const todayBurned = exercises.filter(e => e.member === m.name && e.date === todayKey).reduce((s,e) => s + e.burned, 0);
+    const netKcal = todayKcal - todayBurned;
+    const tdee = profile ? calcTDEE(profile) : null;
+    return { name: m.name, netKcal, tdee, todayKcal, todayBurned, hasRecord: todayEntries.length > 0 };
+  });
+  const ranked = rows.filter(r => r.tdee && r.hasRecord).map(r => {
+    const diff = r.netKcal - r.tdee;
+    const pct = Math.round(r.netKcal / r.tdee * 100);
+    return { ...r, diff, pct };
+  }).sort((a,b) => Math.abs(a.diff) - Math.abs(b.diff));
+  if (ranked.length === 0) {
+    html += '<div style="text-align:center;padding:16px;color:var(--faint);font-size:13px">내 이름 선택 후 "내 정보 설정"을 눌러주세요</div>';
+  } else {
+    const medals = ['🥇','🥈','🥉'];
+    ranked.forEach((r, i) => {
+      const medal = medals[i] || (i+1) + '위';
+      const isGood = Math.abs(r.diff) <= 200;
+      const isOver = r.diff > 200;
+      const statusColor = isGood ? '#4CAF50' : isOver ? '#E0726A' : '#FF9800';
+      const statusText = isGood ? '✅ 딱 좋아요!' : isOver ? '⚠️ +' + r.diff.toLocaleString() + ' kcal' : '📉 ' + r.diff.toLocaleString() + ' kcal';
+      html += '<div style="margin-bottom:14px">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(r.name) + '</span>' +
+        '<span style="font-size:12px;font-weight:700;color:' + statusColor + '">' + statusText + '</span></div>';
+      html += '<div style="height:8px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+        '<div style="height:100%;width:' + Math.min(r.pct,100) + '%;background:' + statusColor + ';border-radius:99px"></div></div>';
+      html += '<div style="display:flex;justify-content:space-between;margin-top:3px">' +
+        '<span style="font-size:11px;color:var(--muted)">달성률 ' + r.pct + '%</span>' +
+        (r.todayBurned > 0 ? '<span style="font-size:11px;color:#4CAF50">운동 -' + r.todayBurned.toLocaleString() + ' kcal</span>' : '') +
+        '</div>';
+      html += '</div>';
+    });
+  }
+  const unset = rows.filter(r => !r.tdee);
+  if (unset.length > 0) {
+    html += '<div style="margin-top:8px;padding-top:10px;border-top:1px solid var(--line)">';
+    unset.forEach(r => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">' +
+        '<span style="font-size:13px;font-weight:700;color:var(--faint)">' + esc(r.name) + '</span>' +
+        '<span style="font-size:12px;color:var(--faint)">정보 미설정</span></div>';
+    });
+    html += '</div>';
+  }
   html += '</div>';
   return html;
 }
@@ -3434,7 +3573,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openMyProfile, pickGender, submitMyProfile });
 
 start();
 </script>
