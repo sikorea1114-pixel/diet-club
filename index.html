@@ -209,6 +209,7 @@ let mode = "day";
 let loaded = false;
 let pollTimer = null;
 let cardCollapsed = { streak: true, mvp: true, summary: true };
+let openedDays = new Set(); // 주간/월별에서 열린 날짜 uid 저장
 let pledges = {};
 let meetDate = "";
 let hall = null;
@@ -686,9 +687,9 @@ function render() {
           '<span style="display:flex;align-items:center;gap:8px">' +
           (monthDayBurned > 0 ? '<span class="tnum" style="font-size:12px;color:#4CAF50">-' + monthDayBurned.toLocaleString() + ' kcal</span>' : '') +
           '<span class="tnum">' + g.total.toLocaleString() + ' kcal</span>' +
-          '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday ? '▲' : '▼') + '</span>' +
+          '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday || openedDays.has(uid) ? '▲' : '▼') + '</span>' +
           '</span></div>';
-        html += '<div id="' + uid + '" style="display:' + (isToday ? 'block' : 'none') + '">';
+        html += '<div id="' + uid + '" style="display:' + (isToday || openedDays.has(uid) ? 'block' : 'none') + '">';
         html += '<div class="col tight">';
         g.items.forEach(e => html += entryCard(e));
         html += '</div>';
@@ -724,9 +725,9 @@ function render() {
             '<span style="display:flex;align-items:center;gap:8px">' +
             (totalBurnedDay > 0 ? '<span class="tnum" style="font-size:12px;color:#4CAF50">-' + totalBurnedDay.toLocaleString() + ' kcal</span>' : '') +
             '<span class="tnum" style="font-size:13px">' + (totalCal ? totalCal.toLocaleString() + ' kcal' : '') + '</span>' +
-            '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday ? '▲' : '▼') + '</span>' +
+            '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday || openedDays.has(uid) ? '▲' : '▼') + '</span>' +
             '</span></div>';
-          html += '<div id="' + uid + '" style="display:' + (isToday ? 'block' : 'none') + '">';
+          html += '<div id="' + uid + '" style="display:' + (isToday || openedDays.has(uid) ? 'block' : 'none') + '">';
           Object.keys(dayMap[d]).forEach(name => {
             html += '<div class="group" style="margin-bottom:10px">';
             html += '<div class="ghead"><b>' + esc(name) + '</b></div>';
@@ -2601,6 +2602,11 @@ function toggleWeekDay(uid) {
   if (uid === "streak-card") cardCollapsed.streak = isOpen;
   if (uid === "mvp-card") cardCollapsed.mvp = isOpen;
   if (uid === "summary-card") cardCollapsed.summary = isOpen;
+  // 주간/월별 날짜 토글 상태 저장
+  if (uid.startsWith("week-") || uid.startsWith("month-")) {
+    if (isOpen) openedDays.delete(uid);
+    else openedDays.add(uid);
+  }
 }
 
 function toggleEntry(el) {
