@@ -2959,19 +2959,8 @@ function renderMukbangHtml() {
     foodCount[key].count++;
   });
   const topFoods = Object.entries(foodCount).sort((a,b) => b[1].count - a[1].count).slice(0, 5);
-  if (topFoods.length > 0) {
-    html += '<div class="card" style="margin-top:0">';
-    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🍽️ 이번 주 자주 먹은 음식 TOP' + topFoods.length + '</div>';
-    html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    topFoods.forEach(([food, data], i) => {
-      html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:14px;font-weight:700">' + (i+1) + '. ' + esc(food) + '</span>' +
-        '<span style="font-size:13px;color:var(--muted);font-weight:700">' + data.count + '회</span></div>';
-    });
-    html += '</div></div>';
-  }
 
-  // 운동왕 섹션
+  // 운동왕 섹션 (자주 먹은 음식보다 위)
   const exData = members.map(m => {
     const mEx = exercises.filter(e => {
       const d = new Date(e.timestamp);
@@ -3015,6 +3004,22 @@ function renderMukbangHtml() {
     html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🏃 이번 주 운동왕</div>';
     html += '<div style="text-align:center;padding:20px;color:var(--faint);font-size:13px">이번 주 운동 기록이 없어요</div>';
     html += '</div>';
+  }
+
+  // 자주 먹은 음식 (접힌 상태)
+  if (topFoods.length > 0) {
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleWeekDay(\'top-foods\')">' +
+      '<div style="font-size:13px;font-weight:700;color:var(--muted)">🍽️ 이번 주 자주 먹은 음식 TOP' + topFoods.length + '</div>' +
+      '<span id="top-foods-arrow" style="font-size:12px;color:var(--muted)">▼</span></div>';
+    html += '<div id="top-foods" style="display:none;margin-top:10px">';
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    topFoods.forEach(([food, data], i) => {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;font-weight:700">' + (i+1) + '. ' + esc(food) + '</span>' +
+        '<span style="font-size:13px;color:var(--muted);font-weight:700">' + data.count + '회</span></div>';
+    });
+    html += '</div></div></div>';
   }
 
   html += '</div>';
