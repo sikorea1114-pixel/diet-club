@@ -3170,6 +3170,9 @@ function renderMukbangHtml() {
 
 function renderHealthCard() {
   const todayKey = fmtKey(new Date());
+  const wr = getWeekRange(new Date());
+
+  // ── 오늘 권장칼로리 달성 ──
   let html = '<div class="card" style="margin-top:0">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   html += '<div style="font-size:13px;font-weight:700;color:var(--muted)">🎯 오늘 권장칼로리 달성</div>';
@@ -3225,6 +3228,77 @@ function renderHealthCard() {
     html += '</div>';
   }
   html += '</div>';
+
+  // ── 이번 주 건강 다이어트 랭킹 ──
+  // 점수 계산: 날짜별 달성률 80~110% → 10점 / 운동한 날 +3점 / 기록 안 한 날 0점
+  const healthRanked = members.map(m => {
+    const profile = getMyProfile(m.name);
+    if (!profile) return { name: m.name, score: null, scoreDays: 0, exDays: 0 };
+    const tdee = calcTDEE(profile);
+    // 이번 주 날짜 목록 (오늘 포함 7일)
+    const weekDays = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      weekDays.push(fmtKey(d));
+    }
+    let score = 0;
+    let scoreDays = 0;
+    weekDays.forEach(d => {
+      const dayEntries = entries.filter(e => e.member === m.name && e.date === d);
+      const dayKcal = dayEntries.reduce((s,e) => s + e.calories, 0);
+      if (dayKcal === 0) return; // 기록 없으면 0점
+      const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
+      const netKcal = dayKcal - dayBurned;
+      const pct = netKcal / tdee * 100;
+      // 달성률에 따른 점수
+      if (pct >= 80 && pct <= 110) score += 10;       // 딱 좋아요
+      else if (pct >= 70 && pct < 80) score += 7;     // 조금 부족
+      else if (pct > 110 && pct <= 130) score += 5;   // 조금 초과
+      else if (pct > 130) score += 2;                  // 많이 초과
+      else score += 4;                                  // 많이 부족
+      // 운동 보너스
+      if (dayBurned > 0) score += 3;
+      scoreDays++;
+    });
+    const exDays = [...new Set(exercises.filter(e => e.member === m.name && weekDays.includes(e.date)).map(e => e.date))].length;
+    return { name: m.name, score, scoreDays, exDays };
+  }).filter(m => m.score !== null && m.scoreDays > 0).sort((a,b) => b.score - a.score);
+
+  if (healthRanked.length > 0) {
+    const maxScore = Math.max(...healthRanked.map(m => m.score));
+    const hMedals = ['🥇','🥈','🥉'];
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:4px">💚 이번 주 건강 다이어트 랭킹</div>';
+    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">권장칼로리 80~110% 달성 +10점 · 운동 +3점</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    healthRanked.forEach((m, i) => {
+      const pct = maxScore > 0 ? Math.round(m.score / maxScore * 100) : 0;
+      const medal = hMedals[i] || (i+1) + '위';
+      html += '<div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+        '<div><span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
+        '<span style="font-size:11px;color:var(--muted);margin-left:6px">' + m.scoreDays + '일 기록 · 운동 ' + m.exDays + '일</span></div>' +
+        '<span style="font-size:14px;font-weight:800;color:#4CAF50">' + m.score + '점</span></div>';
+      html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+        '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'#4CAF50':colorOf(m.name)) + ';border-radius:99px"></div></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+
+    // 미설정 멤버
+    const healthUnset = members.filter(m => !getMyProfile(m.name));
+    if (healthUnset.length > 0) {
+      html += '<div class="card" style="margin-top:0;padding:12px 16px">';
+      healthUnset.forEach(m => {
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0">' +
+          '<span style="font-size:13px;font-weight:700;color:var(--faint)">' + esc(m.name) + '</span>' +
+          '<span style="font-size:12px;color:var(--faint)">정보 미설정 — 내 이름 선택 후 설정</span></div>';
+      });
+      html += '</div>';
+    }
+  }
+
   return html;
 }
 
