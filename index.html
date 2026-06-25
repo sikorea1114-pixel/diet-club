@@ -1040,6 +1040,7 @@ async function start() {
     if (document.activeElement && document.activeElement.id === "ex-min") return;
     if (document.activeElement && document.activeElement.id === "ex-weight") return;
     if (document.activeElement && document.activeElement.tagName === "SELECT") return;
+    if (document.activeElement && document.activeElement.id === "ai-input") return;
     try { await loadAll(); render(); } catch (e) {}
   }, 5000);
 }
@@ -3404,7 +3405,7 @@ async function sendAIMessage() {
   try {
     const payload = { contents: aiHistory.map(m => ({ role: m.role, parts: [{ text: m.parts[0].text }] })) };
     const res = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + key,
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + key,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }
     );
     const data = await res.json();
