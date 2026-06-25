@@ -3052,6 +3052,7 @@ function renderMukbangHtml() {
       const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
       if (dayKcal === 0) return;
       if (dayKcal <= 1500) score += 5;
+      if (dayKcal > 2000) score -= 5;
     });
     return { name: m.name, score, recordDays: recordDays.length, exDays: exDays.length };
   }).sort((a,b) => b.score - a.score);
