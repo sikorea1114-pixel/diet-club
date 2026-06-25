@@ -348,6 +348,8 @@ function setView(v) {
 
 // ── 메인 렌더 ──
 function render() {
+  const chips = document.querySelector(".chips");
+  const savedScroll = chips ? chips.scrollLeft : 0;
   if (!DB_URL) { renderSetup(); return; }
   const app = document.getElementById("app");
 
@@ -790,6 +792,10 @@ function render() {
   if (isReadOnly) html += '<div style="position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
 
   app.innerHTML = html;
+  requestAnimationFrame(() => {
+    const newChips = document.querySelector(".chips");
+    if (newChips && savedScroll > 0) newChips.scrollLeft = savedScroll;
+  });
 }
 
 function exerciseCard(e) {
@@ -1028,6 +1034,7 @@ async function start() {
     if (document.activeElement && document.activeElement.id === "ex-type") return;
     if (document.activeElement && document.activeElement.id === "ex-min") return;
     if (document.activeElement && document.activeElement.id === "ex-weight") return;
+    if (document.activeElement && document.activeElement.tagName === "SELECT") return;
     try { await loadAll(); render(); } catch (e) {}
   }, 5000);
 }
