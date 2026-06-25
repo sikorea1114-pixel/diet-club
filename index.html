@@ -3009,11 +3009,12 @@ function renderMukbangHtml() {
     const mEntries = entries.filter(e => e.member === m.name);
     const mExercises = exercises.filter(e => e.member === m.name);
     const recordDays = [...new Set(mEntries.map(e => e.date))];
+    const exDays = [...new Set(mExercises.map(e => e.date))];
     let score = 0;
     // 기록일 +10점
     score += recordDays.length * 10;
-    // 운동 1회 +5점
-    score += mExercises.length * 5;
+    // 운동한 날 +5점 (하루 여러 번 해도 1회만)
+    score += exDays.length * 5;
     // 날짜별 칼로리 체크
     recordDays.forEach(d => {
       const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
@@ -3021,7 +3022,7 @@ function renderMukbangHtml() {
       if (dayKcal <= 1500) score += 5;                   // 1500 이하 +5
       if (dayKcal > 2000) score -= 5;                    // 2000 초과 -5
     });
-    return { name: m.name, score, recordDays: recordDays.length, exCount: mExercises.length };
+    return { name: m.name, score, recordDays: recordDays.length, exDays: exDays.length };
   }).sort((a,b) => b.score - a.score);
 
   if (scoreData.some(m => m.score > 0)) {
@@ -3037,7 +3038,7 @@ function renderMukbangHtml() {
       html += '<div>';
       html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
         '<div><span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
-        '<span style="font-size:11px;color:var(--muted);margin-left:6px">' + m.recordDays + '일 기록 · 운동 ' + m.exCount + '회</span></div>' +
+        '<span style="font-size:11px;color:var(--muted);margin-left:6px">' + m.recordDays + '일 기록 · 운동 ' + m.exDays + '일</span></div>' +
         '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + m.score + '점</span></div>';
       html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
         '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'var(--accent)':colorOf(m.name)) + ';border-radius:99px"></div></div>';
