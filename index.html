@@ -499,11 +499,12 @@ function render() {
         if (hasTodayRecord) {
           const todayKcal = dayEntries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
           const todayBurned = dayExercises.filter(e => e.member === m.name).reduce((s,e) => s + e.burned, 0);
+          const netKcal = todayKcal - todayBurned;
           html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-            '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + '</span>' +
+            '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
             '<div style="text-align:right">' +
             '<span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
-            (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' kcal 운동</span>' : '') +
+            (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' 운동 → 순 ' + netKcal.toLocaleString() + ' kcal</span>' : '') +
             '</div></div>';
         } else {
           let missDay = 1;
@@ -2949,16 +2950,6 @@ function renderMukbangHtml() {
     html += '</div>';
   });
   html += '</div></div>';
-  const foodCount = {};
-  entries.filter(e => {
-    const d = new Date(e.timestamp);
-    return d >= wr.start && d <= wr.end;
-  }).forEach(e => {
-    const key = e.food.split('\n')[0].trim();
-    if (!foodCount[key]) foodCount[key] = { count: 0 };
-    foodCount[key].count++;
-  });
-  const topFoods = Object.entries(foodCount).sort((a,b) => b[1].count - a[1].count).slice(0, 5);
 
   // 운동왕 섹션 (자주 먹은 음식보다 위)
   const exData = members.map(m => {
@@ -3006,20 +2997,46 @@ function renderMukbangHtml() {
     html += '</div>';
   }
 
-  // 자주 먹은 음식 (접힌 상태)
-  if (topFoods.length > 0) {
-    html += '<div class="card" style="margin-top:0">';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleWeekDay(\'top-foods\')">' +
-      '<div style="font-size:13px;font-weight:700;color:var(--muted)">🍽️ 이번 주 자주 먹은 음식 TOP' + topFoods.length + '</div>' +
-      '<span id="top-foods-arrow" style="font-size:12px;color:var(--muted)">▼</span></div>';
-    html += '<div id="top-foods" style="display:none;margin-top:10px">';
-    html += '<div style="display:flex;flex-direction:column;gap:8px">';
-    topFoods.forEach(([food, data], i) => {
-      html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
-        '<span style="font-size:14px;font-weight:700">' + (i+1) + '. ' + esc(food) + '</span>' +
-        '<span style="font-size:13px;color:var(--muted);font-weight:700">' + data.count + '회</span></div>';
+  // 다이어트 점수 카드
+  const scoreData = members.map(m => {
+    const mEntries = entries.filter(e => e.member === m.name);
+    const mExercises = exercises.filter(e => e.member === m.name);
+    const recordDays = [...new Set(mEntries.map(e => e.date))];
+    let score = 0;
+    // 기록일 +10점
+    score += recordDays.length * 10;
+    // 운동 1회 +5점
+    score += mExercises.length * 5;
+    // 날짜별 칼로리 체크
+    recordDays.forEach(d => {
+      const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
+      if (dayKcal === 0) return;                         // 0칼로리 제외
+      if (dayKcal <= 1500) score += 5;                   // 1500 이하 +5
+      if (dayKcal > 2000) score -= 5;                    // 2000 초과 -5
     });
-    html += '</div></div></div>';
+    return { name: m.name, score, recordDays: recordDays.length, exCount: mExercises.length };
+  }).sort((a,b) => b.score - a.score);
+
+  if (scoreData.some(m => m.score > 0)) {
+    const maxScore = Math.max(...scoreData.map(m => m.score));
+    const scoreMedals = ['🥇','🥈','🥉'];
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:12px">⭐ 시즌 다이어트 점수</div>';
+    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">기록일 +10 · 운동 +5 · 1500kcal이하 +5 · 2000kcal초과 -5</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    scoreData.forEach((m, i) => {
+      const pct = maxScore > 0 ? Math.round(m.score / maxScore * 100) : 0;
+      const medal = scoreMedals[i] || (i+1) + '위';
+      html += '<div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+        '<div><span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
+        '<span style="font-size:11px;color:var(--muted);margin-left:6px">' + m.recordDays + '일 기록 · 운동 ' + m.exCount + '회</span></div>' +
+        '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + m.score + '점</span></div>';
+      html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+        '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'var(--accent)':colorOf(m.name)) + ';border-radius:99px"></div></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
   }
 
   html += '</div>';
