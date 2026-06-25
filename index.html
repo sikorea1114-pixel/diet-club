@@ -676,17 +676,28 @@ function render() {
       else monthGroups.forEach(g => {
         const isToday = g.date === fmtKey(new Date());
         const uid = "month-" + g.date;
+        const monthDayEx = exercises.filter(e => e.date === g.date && (view === "all" || e.member === view));
+        const monthDayBurned = monthDayEx.reduce((s,e) => s + e.burned, 0);
         html += '<div class="group">';
         html += '<div class="ghead" onclick="toggleWeekDay(\'' + uid + '\')" style="cursor:pointer">' +
           '<b>' + fmtDateHeader(g.date) + (isToday ? ' <span style="color:var(--accent);font-size:11px;font-weight:800">오늘</span>' : '') + '</b>' +
           '<span style="display:flex;align-items:center;gap:8px">' +
+          (monthDayBurned > 0 ? '<span class="tnum" style="font-size:12px;color:#4CAF50">-' + monthDayBurned.toLocaleString() + ' kcal</span>' : '') +
           '<span class="tnum">' + g.total.toLocaleString() + ' kcal</span>' +
           '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday ? '▲' : '▼') + '</span>' +
           '</span></div>';
         html += '<div id="' + uid + '" style="display:' + (isToday ? 'block' : 'none') + '">';
         html += '<div class="col tight">';
         g.items.forEach(e => html += entryCard(e));
-        html += '</div></div></div>';
+        html += '</div>';
+        if (monthDayEx.length > 0) {
+          html += '<div class="group" style="margin-top:8px">';
+          html += '<div class="ghead"><b>🏃 운동</b><span class="tnum" style="color:#4CAF50;font-size:13px">-' + monthDayBurned.toLocaleString() + ' kcal</span></div>';
+          html += '<div class="col tight">';
+          monthDayEx.forEach(e => html += exerciseCard(e));
+          html += '</div></div>';
+        }
+        html += '</div></div>';
       });
     } else if (isWeek) {
       if (weekEntries.length === 0) {
@@ -701,12 +712,15 @@ function render() {
         const dates = Object.keys(dayMap).sort().reverse(); // 최신 날짜 위로
         dates.forEach(d => {
           const isToday = d === fmtKey(new Date());
+          const dayEx = exercises.filter(e => e.date === d && (view === "all" || e.member === view));
           const totalCal = Object.values(dayMap[d]).reduce((s,a) => s + a.reduce((ss,e) => ss + e.calories, 0), 0);
+          const totalBurnedDay = dayEx.reduce((s,e) => s + e.burned, 0);
           const uid = "week-" + d;
           html += '<div class="group">';
           html += '<div class="ghead" onclick="toggleWeekDay(\'' + uid + '\')" style="cursor:pointer">' +
             '<b>' + fmtDateHeader(d) + (isToday ? ' <span style="color:var(--accent);font-size:11px;font-weight:800">오늘</span>' : '') + '</b>' +
             '<span style="display:flex;align-items:center;gap:8px">' +
+            (totalBurnedDay > 0 ? '<span class="tnum" style="font-size:12px;color:#4CAF50">-' + totalBurnedDay.toLocaleString() + ' kcal</span>' : '') +
             '<span class="tnum" style="font-size:13px">' + (totalCal ? totalCal.toLocaleString() + ' kcal' : '') + '</span>' +
             '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isToday ? '▲' : '▼') + '</span>' +
             '</span></div>';
@@ -718,6 +732,14 @@ function render() {
             dayMap[d][name].sort((a,b)=>a.timestamp-b.timestamp).forEach(e => html += entryCard(e));
             html += '</div></div>';
           });
+          // 운동 기록
+          if (dayEx.length > 0) {
+            html += '<div class="group" style="margin-bottom:10px">';
+            html += '<div class="ghead"><b>🏃 운동</b><span class="tnum" style="color:#4CAF50;font-size:13px">-' + totalBurnedDay.toLocaleString() + ' kcal</span></div>';
+            html += '<div class="col tight">';
+            dayEx.forEach(e => html += exerciseCard(e));
+            html += '</div></div>';
+          }
           html += '</div></div>';
         });
       }
@@ -1003,6 +1025,9 @@ async function start() {
   pollTimer = setInterval(async () => {
     if (document.getElementById("modal").innerHTML) return;
     if (document.activeElement && document.activeElement.id === "pledge-input") return;
+    if (document.activeElement && document.activeElement.id === "ex-type") return;
+    if (document.activeElement && document.activeElement.id === "ex-min") return;
+    if (document.activeElement && document.activeElement.id === "ex-weight") return;
     try { await loadAll(); render(); } catch (e) {}
   }, 5000);
 }
@@ -3018,9 +3043,8 @@ function renderMukbangHtml() {
     // 날짜별 칼로리 체크
     recordDays.forEach(d => {
       const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
-      if (dayKcal === 0) return;                         // 0칼로리 제외
-      if (dayKcal <= 1500) score += 5;                   // 1500 이하 +5
-      if (dayKcal > 2000) score -= 5;                    // 2000 초과 -5
+      if (dayKcal === 0) return;
+      if (dayKcal <= 1500) score += 5;
     });
     return { name: m.name, score, recordDays: recordDays.length, exDays: exDays.length };
   }).sort((a,b) => b.score - a.score);
