@@ -236,21 +236,18 @@ let exercises = [];
 (function initDbUrl() {
   const params = new URLSearchParams(location.search);
 
-  // 2기 이상만 room 사용
   const room = params.get("room");
-  if (room && room !== "1" && DB_MAP[room]) {
-    DB_URL = DB_MAP[room];
+  if (room === "2") {
+    DB_URL = DB_MAP["2"];
     return;
   }
 
-  // 기존 ?db= 방식도 계속 지원
   const db = params.get("db");
   if (db) {
     DB_URL = db.replace(/\/+$/, "");
     return;
   }
 
-  // 기본은 항상 1기
   DB_URL = DEFAULT_DB;
 })();
 
