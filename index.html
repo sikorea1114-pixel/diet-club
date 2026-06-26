@@ -233,16 +233,26 @@ function seasonPath(sub) {
 }
 
 // ── DB 주소 결정 (URL 해시 > localStorage) ──
+const DB_MAP = {
+  "2": "https://diet-2-d9f25-default-rtdb.firebaseio.com"
+};
+
 (function initDbUrl() {
   const params = new URLSearchParams(location.search);
 
-  // ?db= 가 있으면 그 DB 사용
+  // 2기만 별도 DB 사용
+  if (params.get("room") === "2") {
+    DB_URL = DB_MAP["2"];
+    return;
+  }
+
+  // 기존 ?db= 방식 유지
   if (params.has("db")) {
     DB_URL = params.get("db").replace(/\/+$/, "");
     return;
   }
 
-  // 없으면 기본 DB
+  // 기본은 항상 1기
   DB_URL = DEFAULT_DB;
 })();
 
