@@ -800,17 +800,16 @@ function render() {
   } else if (isNotice) {
     html += renderNoticeHtml();
   } else if (isMukbang) {
-    html += '<div style="display:flex;gap:6px;padding:8px 22px 0">' +
+    const rankSubTab = '<div style="display:flex;gap:6px;padding:8px 22px 0">' +
       '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid ' + (mode==="mukbang"?"var(--ink)":"var(--line)") + ';background:' + (mode==="mukbang"?"var(--ink)":"transparent") + ';color:' + (mode==="mukbang"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">이번 주</button>' +
-      '<button onclick="setMode(\'history\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:700">역대 기록</button>' +
+      '<button onclick="setMode(\'history\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid ' + (mode==="history"?"var(--ink)":"var(--line)") + ';background:' + (mode==="history"?"var(--ink)":"transparent") + ';color:' + (mode==="history"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">역대 기록</button>' +
       '</div>';
-    html += renderMukbangHtml();
-  } else if (mode === "history") {
-    html += '<div style="display:flex;gap:6px;padding:8px 22px 0">' +
-      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:700">이번 주</button>' +
-      '<button onclick="setMode(\'history\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:700">역대 기록</button>' +
-      '</div>';
-    html += renderWeeklyHistoryHtml();
+    html += rankSubTab;
+    if (mode === "history") {
+      html += renderWeeklyHistoryHtml();
+    } else {
+      html += renderMukbangHtml();
+    }
   } else if (isAI) {
     html += renderAIHtml();
   }
@@ -3193,7 +3192,8 @@ function renderMukbangHtml() {
     return { name: m.name, kcal, days };
   }).filter(m => m.kcal > 0).sort((a, b) => b.kcal - a.kcal);
   if (weekData.length === 0) {
-    html += '<div class="empty">이번 주 기록이 없어요.</div></div>';
+    html += '<div class="empty">이번 주 기록이 없어요.</div>';
+    html += '</div>';
     return html;
   }
   const medals = ['🥇','🥈','🥉'];
