@@ -3396,6 +3396,79 @@ function renderMukbangHtml() {
     html += '</div>';
   }
 
+  
+
+const medals = ['🥇','🥈','🥉'];
+  const king = weekData[0];
+  html += '<div class="card">';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🍔 이번 주 먹방왕</div>';
+  html += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:14px;margin-bottom:16px">';
+  html += '<span style="font-size:32px">🍔</span>';
+  html += '<div style="flex:1">';
+  html += '<div style="font-size:17px;font-weight:800">' + esc(king.name) + ' 👑</div>';
+  html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">이번 주 ' + king.kcal.toLocaleString() + ' kcal · ' + king.days + '일 기록</div>';
+  html += '</div></div>';
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">이번 주 칼로리 순위</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px">';
+  weekData.forEach((m, i) => {
+    const pct = Math.round(m.kcal / weekData[0].kcal * 100);
+    const medal = medals[i] || (i + 1) + '위';
+    html += '<div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+      '<span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
+      '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + m.kcal.toLocaleString() + ' kcal</span></div>';
+    html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+      '<div style="height:100%;width:' + pct + '%;background:' + (i === 0 ? '#E0726A' : colorOf(m.name)) + ';border-radius:99px"></div></div>';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  // 운동왕 섹션 (자주 먹은 음식보다 위)
+  const exData = members.map(m => {
+    const mEx = exercises.filter(e => {
+      const d = new Date(e.timestamp);
+      return d >= wr.start && d <= wr.end && e.member === m.name;
+    });
+    const burned = mEx.reduce((s,e) => s + e.burned, 0);
+    const count = mEx.length;
+    const types = mEx.map(e => e.type);
+    return { name: m.name, burned, count, types };
+  }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
+
+  if (exData.length > 0) {
+    const king = exData[0];
+    const exMedals = ['🥇','🥈','🥉'];
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🏃 이번 주 운동왕</div>';
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:14px;margin-bottom:16px">';
+    html += '<span style="font-size:32px">🏃</span>';
+    html += '<div style="flex:1">';
+    html += '<div style="font-size:17px;font-weight:800">' + esc(king.name) + ' 👑</div>';
+    html += '<div style="font-size:13px;color:#4CAF50;margin-top:2px">이번 주 -' + king.burned.toLocaleString() + ' kcal · ' + king.count + '회 운동</div>';
+    html += '</div></div>';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">이번 주 소모 칼로리 순위</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    exData.forEach((m, i) => {
+      const pct = Math.round(m.burned / exData[0].burned * 100);
+      const medal = exMedals[i] || (i+1) + '위';
+      const uniqueTypes = [...new Set(m.types)].slice(0,2).join(', ');
+      html += '<div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+        '<div><span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
+        '<span style="font-size:11px;color:var(--muted);margin-left:6px">' + esc(uniqueTypes) + '</span></div>' +
+        '<span style="font-size:13px;font-weight:700;color:#4CAF50">-' + m.burned.toLocaleString() + ' kcal</span></div>';
+      html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+        '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'#4CAF50':colorOf(m.name)) + ';border-radius:99px"></div></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  } else {
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🏃 이번 주 운동왕</div>';
+    html += '<div style="text-align:center;padding:20px;color:var(--faint);font-size:13px">이번 주 운동 기록이 없어요</div>';
+    html += '</div>';
+  }
+
   // 다이어트 점수 카드
   const scoreData = members.map(m => {
     const mEntries = entries.filter(e => e.member === m.name);
