@@ -205,11 +205,6 @@ const WEEK = ["일","월","화","수","목","금","토"];
 
 // 상태
 const DEFAULT_DB = "https://diet-cae5a-default-rtdb.firebaseio.com";
-
-const DB_MAP = {
-  "1": "https://diet-cae5a-default-rtdb.firebaseio.com",
-  "2": "https://diet-2-d9f25-default-rtdb.firebaseio.com"
-};
 let DB_URL = DEFAULT_DB;
 let members = [];
 let entries = [];
@@ -233,21 +228,21 @@ let hall = null;
 let exercises = [];
 
 // 현재 시즌 DB 경로 prefix
+function seasonPath(sub) {
+  return currentSeasonId === "default" ? sub : "seasons/" + currentSeasonId + "/" + sub;
+}
+
+// ── DB 주소 결정 (URL 해시 > localStorage) ──
 (function initDbUrl() {
   const params = new URLSearchParams(location.search);
 
-  const room = params.get("room");
-  if (room === "2") {
-    DB_URL = DB_MAP["2"];
+  // ?db= 가 있으면 그 DB 사용
+  if (params.has("db")) {
+    DB_URL = params.get("db").replace(/\/+$/, "");
     return;
   }
 
-  const db = params.get("db");
-  if (db) {
-    DB_URL = db.replace(/\/+$/, "");
-    return;
-  }
-
+  // 없으면 기본 DB
   DB_URL = DEFAULT_DB;
 })();
 
