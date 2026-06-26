@@ -205,7 +205,7 @@ let seasons = {};
 let currentSeasonId = "default";
 let date = new Date();
 let view = "all";
-let mode = "day";
+let mode = "home";
 let loaded = false;
 let pollTimer = null;
 let weeklyRecords = {}; // 역대 주간 기록
@@ -394,6 +394,7 @@ function render() {
     g.items.push(e); g.total += e.calories;
   });
 
+  const isHome = mode === "home";
   const isMonth = mode === "month";
   const isWeek = mode === "week";
   const isVote = mode === "vote";
@@ -401,7 +402,7 @@ function render() {
   const isMukbang = mode === "mukbang" || mode === "history";
   const isAI = mode === "ai";
   const isCommunity = isVote || isNotice || isMukbang || isAI;
-  const isRecord = !isCommunity;
+  const isRecord = !isCommunity && !isHome;
   const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
   // 오늘 새 공지/투표 있는지 체크 (레드닷)
@@ -448,6 +449,7 @@ function render() {
     (!isCurrentSeason ? ' <span style="color:#E0726A;font-size:10px">종료</span>' : '') +
     ' ▾</button>';
   html += '<div class="toggle">' +
+    '<button class="' + (isHome?"on":"") + '" onclick="setMode(\'home\')">🏠 홈</button>' +
     '<button class="' + (isRecord?"on":"") + '" onclick="setMode(\'day\')">📋 기록</button>' +
     '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">💬 커뮤니티' +
     (hasNewCommunity ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
@@ -489,107 +491,12 @@ function render() {
   html += '</header>';
 
   // 합계 카드 + 스트릭/MVP (투표/공지 모드 제외)
-  if (!isVote && !isNotice && !isMukbang && !isAI) {
+  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome) {
 
-    // 1. D-day 카드 (제일 위)
-    if (!isMonth && !isWeek && view === "all" && meetDate) {
-      const today = new Date(); today.setHours(0,0,0,0);
-      const meet = new Date(meetDate); meet.setHours(0,0,0,0);
-      const diff = Math.round((meet - today) / 86400000);
-      if (diff >= 0) {
-        const isToday = diff === 0;
-        const isTomorrow = diff === 1;
-        const bg = isToday ? 'var(--accent)' : isTomorrow ? '#E0726A' : 'var(--surface)';
-        const textColor = (isToday || isTomorrow) ? '#fff' : 'var(--ink)';
-        const subColor = (isToday || isTomorrow) ? 'rgba(255,255,255,.8)' : 'var(--muted)';
-        const dateColor = (isToday || isTomorrow) ? 'rgba(255,255,255,.7)' : 'var(--muted)';
-        const emoji = isToday ? '🎊' : isTomorrow ? '😤' : '🏃🏻';
-        const label = isToday ? '🎉 오늘이에요!' : isTomorrow ? '😤 내일 모임이에요!' : 'D-' + diff;
-        const sub = isTomorrow ? '오늘 잘 먹어요 💪' : '다음 모임';
-        html += '<div class="card" style="background:' + bg + '">';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between">';
-        html += '<div>';
-        html += '<div style="font-size:13px;font-weight:700;color:' + subColor + '">' + sub + '</div>';
-        html += '<div style="font-size:22px;font-weight:900;color:' + textColor + ';margin-top:2px">' + label + '</div>';
-        html += '<div style="font-size:12px;color:' + dateColor + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div>';
-        html += '</div>';
-        html += '<div style="font-size:48px">' + emoji + '</div>';
-        html += '</div></div>';
-      }
-    }
-
-    // 2. 오늘 현황 카드
-    if (!isMonth && !isWeek && view === "all" && members.length > 0 && loaded) {
-      html += '<div class="card" style="margin-top:0">';
-      html += '<div class="sub">📋 오늘 현황</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
-      members.forEach(m => {
-        const hasTodayRecord = dayEntries.some(e => e.member === m.name);
-        if (hasTodayRecord) {
-          const todayKcal = dayEntries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
-          const todayBurned = dayExercises.filter(e => e.member === m.name).reduce((s,e) => s + e.burned, 0);
-          const netKcal = todayKcal - todayBurned;
-          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-            '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
-            '<div style="text-align:right">' +
-            '<span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
-            (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' 운동 → 순 ' + netKcal.toLocaleString() + ' kcal</span>' : '') +
-            '</div></div>';
-        } else {
-          let missDay = 1;
-          const d = new Date(); d.setDate(d.getDate() - 1);
-          while (missDay < 30) {
-            const key = fmtKey(d);
-            const hasRecord = entries.some(e => e.member === m.name && e.date === key);
-            if (hasRecord) break;
-            missDay++;
-            d.setDate(d.getDate() - 1);
-          }
-          const yesterdayKey = fmtKey(new Date(Date.now() - 86400000));
-          const hadStreak = missDay === 2 && entries.some(e => e.member === m.name && e.date === fmtKey(new Date(Date.now() - 86400000 * 2)));
-          const prevStreak = hadStreak ? calcStreakAt(m.name, fmtKey(new Date(Date.now() - 86400000 * 2))) + 1 : 0;
-          const emoji = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
-          const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
-          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-            '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji + ' ' + esc(m.name) + '</span>' +
-            '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px">' +
-            '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span>' +
-            (missDay === 2 && prevStreak >= 2 ? '<span style="font-size:11px;color:var(--muted)">😢 ' + prevStreak + '일 스트릭 끊겼어요</span>' : '') +
-            '</div></div>';
-        }
-      });
-      html += '</div></div>';
-    }
-
-    // 3. 오늘의 다짐 카드
-    if (!isMonth && !isWeek && members.length > 0 && loaded) {
-      html += '<div class="card" style="margin-top:0">';
-      html += '<div class="sub">💬 오늘의 다짐</div>';
-      html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
-      members.forEach(m => {
-        const pledge = pledges[m.name];
-        html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
-        html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + esc(m.name) + '</span>';
-        if (pledge) {
-          html += '<span style="font-size:13px;color:var(--ink);flex:1;text-align:right">"' + esc(pledge) + '"</span>';
-        } else {
-          html += '<span style="font-size:12px;color:var(--faint);flex:1;text-align:right">아직 없음</span>';
-        }
-        html += '</div>';
-      });
-      html += '</div>';
-      const myPledge = view !== "all" ? (pledges[view] || "") : "";
-      html += '<div style="display:flex;gap:8px;margin-top:12px">' +
-        '<input class="ti" id="pledge-input" placeholder="' + (view === "all" ? "이름 선택 후 다짐 입력" : "오늘의 다짐 한 줄") + '" value="' + esc(myPledge) + '" ' + (view === "all" ? 'disabled ' : '') + 'style="flex:1;margin:0" />' +
-        '<button onclick="submitPledge()" ' + (view === "all" ? 'disabled ' : '') + 'style="padding:0 16px;border-radius:12px;border:none;background:' + (view === "all" ? 'var(--faint)' : 'var(--accent)') + ';color:#fff;font-size:13px;font-weight:800">저장</button>' +
-        '</div>';
-      html += '</div>';
-    }
-
-    // 4. 합계 카드 (접힌 상태 기본)
+    // 합계 카드
     html += '<div class="card" style="margin-top:0">';
     html += '<div class="sub" onclick="toggleWeekDay(\'summary-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
-      (isMonth ? (view==="all" ? "이번 달 모임 전체" : "이번 달 " + esc(view) + " 님") : (view==="all" ? "모임 전체 섭취량" : esc(view) + " 님 섭취량")) +
+      (isMonth ? (view==="all" ? "이번 달 모임 전체" : "이번 달 " + esc(view) + " 님") : isWeek ? (view==="all" ? "이번 주 모임 전체" : esc(view) + " 님") : (view==="all" ? "모임 전체 섭취량" : esc(view) + " 님 섭취량")) +
       '<span id="summary-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.summary ? '▼' : '▲') + '</span></div>';
     html += '<div id="summary-card" style="display:' + (cardCollapsed.summary ? 'none' : 'block') + '">';
     html += '<div class="big"><b class="tnum">' + totalKcal.toLocaleString() + '</b><span>kcal</span></div>';
@@ -598,8 +505,8 @@ function render() {
       html += '<div class="avg tnum">기록한 ' + monthGroups.length + '일 · 하루 평균 ' + monthAvg.toLocaleString() + ' kcal' + (monthBurned > 0 ? ' · 운동 -' + monthBurned.toLocaleString() + ' kcal' : '') + '</div>';
     }
     if (isWeek) {
-      const wr = getWeekRange(date);
-      const weekBurned = exercises.filter(e => { const d = new Date(e.timestamp); return d >= wr.start && d <= wr.end && (view === "all" || e.member === view); }).reduce((s,e) => s + e.burned, 0);
+      const wrW = getWeekRange(date);
+      const weekBurned = exercises.filter(e => { const d = new Date(e.timestamp); return d >= wrW.start && d <= wrW.end && (view === "all" || e.member === view); }).reduce((s,e) => s + e.burned, 0);
       const weekDayCount = new Set(weekEntries.map(e => e.date)).size;
       html += '<div class="avg tnum">기록한 ' + weekDayCount + '일' + (weekBurned > 0 ? ' · 운동 -' + weekBurned.toLocaleString() + ' kcal' : '') + '</div>';
     }
@@ -630,80 +537,8 @@ function render() {
         '<span style="font-size:15px;font-weight:800">' + esc(hall.record.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.record.days + '일</span></span></div>';
       html += '</div></div>';
     }
-
-    if (view === "all" && members.length > 0 && loaded) {
-      const streaks = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).filter(s => s.streak > 0);
-      if (streaks.length > 0) {
-        html += '<div class="card" style="margin-top:0">';
-        html += '<div class="sub" onclick="toggleWeekDay(\'streak-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🔥 연속 기록 스트릭<span id="streak-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.streak ? '▼' : '▲') + '</span></div>';
-        html += '<div id="streak-card" style="display:' + (cardCollapsed.streak ? 'none' : 'block') + '">';
-        html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
-        streaks.sort((a,b) => b.streak - a.streak).forEach(s => {
-          const flames = streakEmoji(s.streak);
-          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-            '<span style="font-size:14px;font-weight:700">' + esc(s.name) + '</span>' +
-            '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + flames + ' ' + s.streak + '일 연속</span>' +
-            '</div>';
-        });
-        html += '</div></div></div>';
-      }
-
-      // MVP 카드 (이번 주 다이어트 점수 기준)
-      const wr2 = getWeekRange(new Date());
-      const weekDaysArr = [];
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(wr2.start);
-        d.setDate(wr2.start.getDate() + i);
-        weekDaysArr.push(fmtKey(d));
-      }
-      const mvpData = members.map(m => {
-        let score = 0;
-        let recordDays = 0;
-        let exDays = 0;
-        weekDaysArr.forEach(d => {
-          const dayEntries = entries.filter(e => e.member === m.name && e.date === d);
-          const dayKcal = dayEntries.reduce((s,e) => s + e.calories, 0);
-          if (dayKcal === 0) return;
-          const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
-          const netKcal = dayKcal - dayBurned;
-          score += 10; // 기록일 +10
-          if (netKcal <= 1500) score += 5; // 1500 이하 +5
-          if (netKcal > 2000) score -= 5;  // 2000 초과 -5
-          recordDays++;
-        });
-        const exDaysSet = new Set(exercises.filter(e => e.member === m.name && weekDaysArr.includes(e.date)).map(e => e.date));
-        exDays = exDaysSet.size;
-        score += exDays * 5; // 운동일 +5
-        return { name: m.name, score, recordDays, exDays };
-      }).filter(m => m.recordDays > 0).sort((a,b) => b.score - a.score);
-
-      if (mvpData.length > 0) {
-        const mvp = mvpData[0];
-        html += '<div class="card" style="margin-top:0">';
-        html += '<div class="sub" onclick="toggleWeekDay(\'mvp-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🏆 이번 주 MVP<span id="mvp-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.mvp ? '▼' : '▲') + '</span></div>';
-        html += '<div id="mvp-card" style="display:' + (cardCollapsed.mvp ? 'none' : 'block') + '">';
-        html += '<div style="display:flex;align-items:center;gap:12px;margin-top:12px">';
-        const mc = colorOf(mvp.name);
-        html += '<span style="width:46px;height:46px;border-radius:14px;background:' + mc + '22;color:' + mc + ';display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
-        html += '<div style="flex:1">' +
-          '<div style="font-size:17px;font-weight:800">' + esc(mvp.name) + ' 👑</div>' +
-          '<div style="font-size:12px;color:var(--muted);margin-top:3px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록 · 운동 ' + mvp.exDays + '일</div>' +
-          '</div>';
-        html += '</div>';
-        if (mvpData.length > 1) {
-          html += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px">';
-          mvpData.slice(1).forEach((m, i) => {
-            html += '<div style="display:flex;justify-content:space-between;font-size:13px">' +
-              '<span style="color:var(--muted)">' + (i+2) + '위 ' + esc(m.name) + '</span>' +
-              '<span style="color:var(--muted);font-weight:700">' + m.score + '점 · ' + m.recordDays + '일 · 운동 ' + m.exDays + '일</span>' +
-              '</div>';
-          });
-          html += '</div>';
-        }
-        html += '</div></div>';
-      }
-    }
   }
+
 
   // 칩
   html += '<div class="chips noscroll">';
@@ -718,7 +553,9 @@ function render() {
   html += '</div>';
 
   // 리스트 (투표/공지 모드 제외)
-  if (!isVote && !isNotice && !isMukbang && !isAI) {
+  if (isHome) {
+    html += renderHomeHtml(dayKey, dayEntries, dayExercises, wr);
+  } else if (!isVote && !isNotice && !isMukbang && !isAI) {
     html += '<div class="list">';
     if (!loaded) {
       html += '<div class="empty">불러오는 중…</div>';
@@ -847,8 +684,8 @@ function render() {
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:170px">' + iconPlus(20) + ' 먹은 거 적기</button>';
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isReadOnly) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:170px">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
   if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
   if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
   if (isReadOnly) html += '<div style="position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
@@ -3279,6 +3116,146 @@ function renderWeeklyHistoryHtml() {
   html += '</div>';
   return html;
 }
+// ── 홈 화면 ──
+function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
+  let html = '<div style="padding-bottom:100px">';
+
+  // D-day 카드
+  if (meetDate) {
+    const today = new Date(); today.setHours(0,0,0,0);
+    const meet = new Date(meetDate); meet.setHours(0,0,0,0);
+    const diff = Math.round((meet - today) / 86400000);
+    if (diff >= 0) {
+      const isToday = diff === 0, isTomorrow = diff === 1;
+      const bg = isToday ? 'var(--accent)' : isTomorrow ? '#E0726A' : 'var(--surface)';
+      const textColor = (isToday||isTomorrow) ? '#fff' : 'var(--ink)';
+      const subColor = (isToday||isTomorrow) ? 'rgba(255,255,255,.8)' : 'var(--muted)';
+      const dateColor = (isToday||isTomorrow) ? 'rgba(255,255,255,.7)' : 'var(--muted)';
+      const emoji = isToday ? '🎊' : isTomorrow ? '😤' : '🏃🏻';
+      const label = isToday ? '🎉 오늘이에요!' : isTomorrow ? '😤 내일 모임이에요!' : 'D-' + diff;
+      const sub = isTomorrow ? '오늘 잘 먹어요 💪' : '다음 모임';
+      html += '<div class="card" style="background:' + bg + '">';
+      html += '<div style="display:flex;align-items:center;justify-content:space-between">';
+      html += '<div><div style="font-size:13px;font-weight:700;color:' + subColor + '">' + sub + '</div>';
+      html += '<div style="font-size:22px;font-weight:900;color:' + textColor + ';margin-top:2px">' + label + '</div>';
+      html += '<div style="font-size:12px;color:' + dateColor + ';margin-top:2px">' + meetDate.replace(/-/g,'.') + '</div></div>';
+      html += '<div style="font-size:48px">' + emoji + '</div>';
+      html += '</div></div>';
+    }
+  }
+
+  // 오늘 현황
+  if (members.length > 0 && loaded) {
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div class="sub">📋 오늘 현황</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
+    members.forEach(m => {
+      const hasTodayRecord = dayEntries.some(e => e.member === m.name);
+      if (hasTodayRecord) {
+        const todayKcal = dayEntries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
+        const todayBurned = dayExercises.filter(e => e.member === m.name).reduce((s,e) => s + e.burned, 0);
+        const netKcal = todayKcal - todayBurned;
+        html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
+          '<div style="text-align:right"><span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
+          (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' 운동 → 순 ' + netKcal.toLocaleString() + ' kcal</span>' : '') +
+          '</div></div>';
+      } else {
+        let missDay = 1;
+        const d = new Date(); d.setDate(d.getDate() - 1);
+        while (missDay < 30) { if (entries.some(e => e.member === m.name && e.date === fmtKey(d))) break; missDay++; d.setDate(d.getDate()-1); }
+        const emoji2 = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
+        const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
+        html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + esc(m.name) + '</span>' +
+          '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span></div>';
+      }
+    });
+    html += '</div></div>';
+  }
+
+  // 오늘의 다짐
+  if (members.length > 0 && loaded) {
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div class="sub">💬 오늘의 다짐</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
+    members.forEach(m => {
+      const pledge = pledges[m.name];
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
+      html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + esc(m.name) + '</span>';
+      html += pledge ? '<span style="font-size:13px;color:var(--ink);flex:1;text-align:right">&quot;' + esc(pledge) + '&quot;</span>' : '<span style="font-size:12px;color:var(--faint);flex:1;text-align:right">아직 없음</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    const myPledge = view !== "all" ? (pledges[view] || "") : "";
+    html += '<div style="display:flex;gap:8px;margin-top:12px">' +
+      '<input class="ti" id="pledge-input" placeholder="' + (view === "all" ? "이름 선택 후 다짐 입력" : "오늘의 다짐 한 줄") + '" value="' + esc(myPledge) + '" ' + (view === "all" ? "disabled " : "") + 'style="flex:1;margin:0" />' +
+      '<button onclick="submitPledge()" ' + (view === "all" ? "disabled " : "") + 'style="padding:0 16px;border-radius:12px;border:none;background:' + (view === "all" ? "var(--faint)" : "var(--accent)") + ';color:#fff;font-size:13px;font-weight:800">저장</button>' +
+      '</div>';
+    html += '</div>';
+  }
+
+  // 스트릭
+  if (members.length > 0 && loaded) {
+    const streaks = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).filter(s => s.streak > 0);
+    if (streaks.length > 0) {
+      html += '<div class="card" style="margin-top:0">';
+      html += '<div class="sub" style="margin-bottom:10px">🔥 스트릭</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:8px">';
+      streaks.sort((a,b) => b.streak - a.streak).forEach(s => {
+        html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<span style="font-size:14px;font-weight:700">' + esc(s.name) + '</span>' +
+          '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + streakEmoji(s.streak) + ' ' + s.streak + '일 연속</span>' +
+          '</div>';
+      });
+      html += '</div></div>';
+    }
+
+    // MVP
+    const wr2 = getWeekRange(new Date());
+    const weekDaysArr = [];
+    for (let i = 0; i < 7; i++) { const d = new Date(wr2.start); d.setDate(wr2.start.getDate()+i); weekDaysArr.push(fmtKey(d)); }
+    const mvpData = members.map(m => {
+      let score = 0, recordDays = 0;
+      weekDaysArr.forEach(d => {
+        const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s+e.calories, 0);
+        if (!dayKcal) return;
+        const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s+e.burned, 0);
+        const netKcal = dayKcal - dayBurned;
+        score += 10;
+        if (netKcal <= 1500) score += 5;
+        if (netKcal > 2000) score -= 5;
+        recordDays++;
+      });
+      const exDays = new Set(exercises.filter(e => e.member === m.name && weekDaysArr.includes(e.date)).map(e => e.date)).size;
+      score += exDays * 5;
+      return { name: m.name, score, recordDays };
+    }).filter(m => m.recordDays > 0).sort((a,b) => b.score - a.score);
+
+    if (mvpData.length > 0) {
+      const mvp = mvpData[0];
+      const mc = colorOf(mvp.name);
+      html += '<div class="card" style="margin-top:0">';
+      html += '<div class="sub" style="margin-bottom:10px">🏆 이번 주 MVP</div>';
+      html += '<div style="display:flex;align-items:center;gap:12px">';
+      html += '<span style="width:42px;height:42px;border-radius:12px;background:' + mc + '22;color:' + mc + ';display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
+      html += '<div><div style="font-size:16px;font-weight:800">' + esc(mvp.name) + ' 👑</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록</div></div>';
+      html += '</div>';
+      if (mvpData.length > 1) {
+        html += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">';
+        mvpData.slice(1).forEach((m,i) => {
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted)">' + (i+2) + '위 ' + esc(m.name) + '</span><span style="color:var(--muted);font-weight:700">' + m.score + '점</span></div>';
+        });
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
 function renderMukbangHtml() {
   const wr = getWeekRange(new Date());
   let html = '<div class="list" style="padding-bottom:100px">';
