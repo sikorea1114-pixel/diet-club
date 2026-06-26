@@ -236,9 +236,9 @@ let exercises = [];
 (function initDbUrl() {
   const params = new URLSearchParams(location.search);
 
-  // ?room=1, ?room=2 지원
+  // 2기 이상만 room 사용
   const room = params.get("room");
-  if (room && DB_MAP[room]) {
+  if (room && room !== "1" && DB_MAP[room]) {
     DB_URL = DB_MAP[room];
     return;
   }
@@ -250,7 +250,7 @@ let exercises = [];
     return;
   }
 
-  // 기본은 1기
+  // 기본은 항상 1기
   DB_URL = DEFAULT_DB;
 })();
 
