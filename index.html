@@ -287,7 +287,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -296,7 +296,8 @@ async function loadAll() {
     dbGet(seasonPath("pledges/" + fmtKey(new Date()))),
     currentSeasonId === "default" ? dbGet("meetDate") : dbGet("seasons/" + currentSeasonId + "/meetDate"),
     currentSeasonId === "default" ? dbGet("hall") : dbGet("seasons/" + currentSeasonId + "/hall"),
-    dbGet(seasonPath("exercises"))
+    dbGet(seasonPath("exercises")),
+    dbGet("geminiKey")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -307,6 +308,7 @@ async function loadAll() {
   meetDate = md || "";
   hall = h || null;
   exercises = ex ? Object.values(ex) : [];
+  if (gk) geminiKey = gk;
   loaded = true;
 }
 
@@ -3311,10 +3313,13 @@ function renderHealthCard() {
 let aiHistory = [];
 let aiTyping = false;
 
+let geminiKey = "";
+
 function getGeminiKey() {
-  try { return localStorage.getItem("dietclub_gemini_key") || ""; } catch { return ""; }
+  return geminiKey || (function(){ try { return localStorage.getItem("dietclub_gemini_key") || ""; } catch { return ""; } })();
 }
 function saveGeminiKey(k) {
+  geminiKey = k;
   try { localStorage.setItem("dietclub_gemini_key", k); } catch {}
 }
 
@@ -3365,10 +3370,11 @@ function renderAIHtml() {
   return html;
 }
 
-function saveGeminiKeyAndRender() {
+async function saveGeminiKeyAndRender() {
   const k = document.getElementById("gemini-key-input").value.trim();
   if (!k) { alert("키를 입력해주세요!"); return; }
   saveGeminiKey(k);
+  await dbPut("geminiKey", k);
   render();
 }
 function changeGeminiKey() { saveGeminiKey(""); aiHistory = []; render(); }
