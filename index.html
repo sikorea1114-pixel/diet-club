@@ -204,7 +204,8 @@ const MEMBER_COLORS = ["#FF8A65","#4FC3F7","#BA68C8","#FFB74D","#4DB6AC","#F0629
 const WEEK = ["일","월","화","수","목","금","토"];
 
 // 상태
-let DB_URL = "https://diet-cae5a-default-rtdb.firebaseio.com";
+const DEFAULT_DB = "https://diet-cae5a-default-rtdb.firebaseio.com";
+let DB_URL = DEFAULT_DB;
 let members = [];
 let entries = [];
 let polls = {};
@@ -233,13 +234,16 @@ function seasonPath(sub) {
 
 // ── DB 주소 결정 (URL 해시 > localStorage) ──
 (function initDbUrl() {
-  const hash = location.hash.match(/db=([^&]+)/);
-  if (hash) {
-    DB_URL = decodeURIComponent(hash[1]).replace(/\/+$/, "");
-    try { localStorage.setItem("dietclub_db", DB_URL); } catch (e) {}
-  } else {
-    try { DB_URL = localStorage.getItem("dietclub_db") || "https://diet-cae5a-default-rtdb.firebaseio.com"; } catch (e) { DB_URL = "https://diet-cae5a-default-rtdb.firebaseio.com"; }
+  const params = new URLSearchParams(location.search);
+
+  // ?db= 가 있으면 그 DB 사용
+  if (params.has("db")) {
+    DB_URL = params.get("db").replace(/\/+$/, "");
+    return;
   }
+
+  // 없으면 기본 DB
+  DB_URL = DEFAULT_DB;
 })();
 
 // ── 날짜 유틸 ──
