@@ -208,6 +208,7 @@ let view = "all";
 let mode = "day";
 let loaded = false;
 let pollTimer = null;
+let weeklyRecords = {}; // 역대 주간 기록
 let cardCollapsed = { streak: true, mvp: true, summary: true };
 let openedDays = new Set(); // 주간/월별에서 열린 날짜 uid 저장
 let pledges = {};
@@ -251,12 +252,20 @@ function fmtDateHeader(s) {
 }
 
 function getWeekRange(baseDate) {
-  const end = new Date(baseDate);
-  end.setHours(23,59,59,999);
-  const start = new Date(end);
-  start.setDate(end.getDate() - 6);
-  start.setHours(0,0,0,0);
+  const d = new Date(baseDate);
+  const day = d.getDay(); // 0=일, 1=월 ... 6=토
+  const diffToMon = (day === 0) ? -6 : 1 - day; // 이번 주 월요일까지 차이
+  const start = new Date(d);
+  start.setDate(d.getDate() + diffToMon);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
   return { start, end };
+}
+function getWeekKey(baseDate) {
+  const wr = getWeekRange(baseDate);
+  return fmtKey(wr.start); // "2026-06-23" 형태로 주 식별
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -287,7 +296,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -298,7 +307,8 @@ async function loadAll() {
     currentSeasonId === "default" ? dbGet("hall") : dbGet("seasons/" + currentSeasonId + "/hall"),
     dbGet(seasonPath("exercises")),
     dbGet("geminiKey"),
-    dbGet("aiChat")
+    dbGet("aiChat"),
+    dbGet(seasonPath("weeklyRecords"))
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -310,11 +320,12 @@ async function loadAll() {
   hall = h || null;
   exercises = ex ? Object.values(ex) : [];
   if (gk) geminiKey = gk;
-  // 전체 AI 대화 Firebase에서 복원
   if (ac && Array.isArray(ac)) {
     aiHistories["all"] = ac.map(m => ({ role: m.role, parts: [{ text: m.text }], displayText: m.text }));
   }
+  weeklyRecords = wr2 || {};
   loaded = true;
+  await autoSaveLastWeek();
 }
 
 // ── 액션 ──
@@ -382,7 +393,7 @@ function render() {
   const isWeek = mode === "week";
   const isVote = mode === "vote";
   const isNotice = mode === "notice";
-  const isMukbang = mode === "mukbang";
+  const isMukbang = mode === "mukbang" || mode === "history";
   const isAI = mode === "ai";
   const isCommunity = isVote || isNotice || isMukbang || isAI;
   const isRecord = !isCommunity;
@@ -454,7 +465,7 @@ function render() {
       (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
       '<button onclick="setMode(\'ai\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="ai"?"var(--ink)":"var(--line)") + ';background:' + (mode==="ai"?"var(--ink)":"transparent") + ';color:' + (mode==="ai"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🤖 AI</button>' +
-      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="mukbang"?"var(--ink)":"var(--line)") + ';background:' + (mode==="mukbang"?"var(--ink)":"transparent") + ';color:' + (mode==="mukbang"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🏆 랭킹' +
+      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (isMukbang?"var(--ink)":"var(--line)") + ';background:' + (isMukbang?"var(--ink)":"transparent") + ';color:' + (isMukbang?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🏆 랭킹' +
       '</button>' +
       '</div>';
   }
@@ -789,7 +800,17 @@ function render() {
   } else if (isNotice) {
     html += renderNoticeHtml();
   } else if (isMukbang) {
+    html += '<div style="display:flex;gap:6px;padding:8px 22px 0">' +
+      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid ' + (mode==="mukbang"?"var(--ink)":"var(--line)") + ';background:' + (mode==="mukbang"?"var(--ink)":"transparent") + ';color:' + (mode==="mukbang"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">이번 주</button>' +
+      '<button onclick="setMode(\'history\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:700">역대 기록</button>' +
+      '</div>';
     html += renderMukbangHtml();
+  } else if (mode === "history") {
+    html += '<div style="display:flex;gap:6px;padding:8px 22px 0">' +
+      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:13px;font-weight:700">이번 주</button>' +
+      '<button onclick="setMode(\'history\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid var(--ink);background:var(--ink);color:#fff;font-size:13px;font-weight:700">역대 기록</button>' +
+      '</div>';
+    html += renderWeeklyHistoryHtml();
   } else if (isAI) {
     html += renderAIHtml();
   }
@@ -3044,7 +3065,121 @@ async function submitNewSeason() {
   switchSeason(id);
 }
 
-// ── 먹방왕 화면 ──
+// ── 지난 주 자동 저장 ──
+async function autoSaveLastWeek() {
+  const today = new Date();
+  const lastWeekDate = new Date(today);
+  lastWeekDate.setDate(today.getDate() - 7);
+  const lastWeekKey = getWeekKey(lastWeekDate);
+  // 이미 저장됐으면 스킵
+  if (weeklyRecords[lastWeekKey]) return;
+  const lwr = getWeekRange(lastWeekDate);
+  // 지난 주 데이터가 있는지 확인
+  const hasData = entries.some(e => {
+    const d = new Date(e.timestamp);
+    return d >= lwr.start && d <= lwr.end;
+  });
+  if (!hasData) return;
+  // 먹방왕
+  const mukData = members.map(m => {
+    const wEntries = entries.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
+    return { name: m.name, kcal: wEntries.reduce((s,e) => s + e.calories, 0) };
+  }).filter(m => m.kcal > 0).sort((a,b) => b.kcal - a.kcal);
+  // 운동왕
+  const exData2 = members.map(m => {
+    const mEx = exercises.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
+    return { name: m.name, burned: mEx.reduce((s,e) => s + e.burned, 0) };
+  }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
+  // 건강왕
+  const weekDays2 = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(lwr.start);
+    d.setDate(lwr.start.getDate() + i);
+    weekDays2.push(fmtKey(d));
+  }
+  const healthData = members.map(m => {
+    const profile = getMyProfile(m.name);
+    if (!profile) return null;
+    const tdee = calcTDEE(profile);
+    let score = 0, scoreDays = 0;
+    weekDays2.forEach(d => {
+      const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.calories, 0);
+      if (!dayKcal) return;
+      const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
+      const pct = (dayKcal - dayBurned) / tdee * 100;
+      if (pct >= 80 && pct <= 110) score += 10;
+      else if (pct >= 70) score += 7;
+      else if (pct <= 130) score += 5;
+      else score += 2;
+      if (dayBurned > 0) score += 3;
+      scoreDays++;
+    });
+    return { name: m.name, score, scoreDays };
+  }).filter(Boolean).filter(m => m.scoreDays > 0).sort((a,b) => b.score - a.score);
+
+  const record = {
+    weekKey: lastWeekKey,
+    weekLabel: fmtDateHeader(lastWeekKey) + " ~ " + fmtDateHeader(fmtKey(lwr.end)),
+    mukbang: mukData.slice(0,3),
+    exercise: exData2.slice(0,3),
+    health: healthData.slice(0,3),
+    savedAt: Date.now()
+  };
+  weeklyRecords[lastWeekKey] = record;
+  await dbPut(seasonPath("weeklyRecords") + "/" + lastWeekKey, record);
+}
+
+// ── 역대 랭킹 렌더링 ──
+function renderWeeklyHistoryHtml() {
+  const records = Object.values(weeklyRecords).sort((a,b) => b.weekKey.localeCompare(a.weekKey));
+  let html = '<div class="list" style="padding-bottom:100px">';
+  if (records.length === 0) {
+    html += '<div class="empty">아직 지난 주 기록이 없어요.<br>다음 주 월요일에 자동 저장돼요!</div>';
+    html += '</div>';
+    return html;
+  }
+  const medals = ['🥇','🥈','🥉'];
+  records.forEach(r => {
+    html += '<div class="card" style="margin-bottom:0">';
+    html += '<div style="font-size:13px;font-weight:800;color:var(--ink);margin-bottom:12px">📅 ' + esc(r.weekLabel) + '</div>';
+    // 먹방왕
+    if (r.mukbang && r.mukbang.length > 0) {
+      html += '<div style="margin-bottom:10px">';
+      html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px">🍔 먹방왕</div>';
+      r.mukbang.forEach((m, i) => {
+        html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0">' +
+          '<span>' + medals[i] + ' ' + esc(m.name) + '</span>' +
+          '<span style="color:var(--muted);font-weight:700">' + m.kcal.toLocaleString() + ' kcal</span></div>';
+      });
+      html += '</div>';
+    }
+    // 운동왕
+    if (r.exercise && r.exercise.length > 0) {
+      html += '<div style="margin-bottom:10px">';
+      html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px">🏃 운동왕</div>';
+      r.exercise.forEach((m, i) => {
+        html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0">' +
+          '<span>' + medals[i] + ' ' + esc(m.name) + '</span>' +
+          '<span style="color:#4CAF50;font-weight:700">-' + m.burned.toLocaleString() + ' kcal</span></div>';
+      });
+      html += '</div>';
+    }
+    // 건강왕
+    if (r.health && r.health.length > 0) {
+      html += '<div>';
+      html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:5px">💚 건강왕</div>';
+      r.health.forEach((m, i) => {
+        html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:2px 0">' +
+          '<span>' + medals[i] + ' ' + esc(m.name) + '</span>' +
+          '<span style="color:var(--accent);font-weight:700">' + m.score + '점</span></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
 function renderMukbangHtml() {
   const wr = getWeekRange(new Date());
   let html = '<div class="list" style="padding-bottom:100px">';
