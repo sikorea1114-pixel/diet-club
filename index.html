@@ -3310,8 +3310,18 @@ function renderHealthCard() {
 }
 
 // ── AI 채팅 ──
-let aiHistory = [];
+let aiHistories = {}; // 멤버별 대화 히스토리
 let aiTyping = false;
+
+function getAiHistory() {
+  const key = view || "all";
+  if (!aiHistories[key]) aiHistories[key] = [];
+  return aiHistories[key];
+}
+function setAiHistory(msgs) {
+  const key = view || "all";
+  aiHistories[key] = msgs;
+}
 
 let geminiKey = "";
 
@@ -3347,12 +3357,20 @@ function renderAIHtml() {
   const todayBurned = exercises.filter(e => e.date === todayKey).reduce((s,e) => s + e.burned, 0);
   html += '<div class="card" style="margin-bottom:8px;padding:12px 16px">';
   html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px">🤖 AI 다이어트 상담</div>';
-  html += '<div style="font-size:12px;color:var(--faint)">오늘 ' + todayKcal.toLocaleString() + ' kcal' + (todayBurned > 0 ? ' · 운동 -' + todayBurned.toLocaleString() + ' kcal' : '') + ' 기준으로 상담해요</div>';
+  if (view === "all") {
+    const recorded = members.filter(m => entries.some(e => e.member === m.name && e.date === todayKey)).length;
+    html += '<div style="font-size:12px;color:var(--faint)">모임 전체 현황 기준 · 오늘 기록 ' + recorded + '/' + members.length + '명</div>';
+  } else {
+    const mKcal = entries.filter(e => e.member === view && e.date === todayKey).reduce((s,e) => s + e.calories, 0);
+    const mBurned = exercises.filter(e => e.member === view && e.date === todayKey).reduce((s,e) => s + e.burned, 0);
+    html += '<div style="font-size:12px;color:var(--faint)">' + esc(view) + ' · 오늘 ' + mKcal.toLocaleString() + ' kcal' + (mBurned > 0 ? ' · 운동 -' + mBurned.toLocaleString() + ' kcal' : '') + ' 기준</div>';
+  }
   html += '<div style="margin-top:8px;display:flex;gap:10px">';
   html += '<button onclick="resetAIChat()" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:0">대화 초기화</button>';
   html += '<button onclick="changeGeminiKey()" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:0">키 변경</button>';
   html += '</div></div>';
   html += '<div id="ai-chat-box" style="display:flex;flex-direction:column;gap:10px;padding:0 0 16px">';
+  const aiHistory = getAiHistory();
   if (aiHistory.length === 0) {
     html += '<div style="text-align:center;padding:24px;color:var(--muted);font-size:14px">안녕하세요! 다이어트 관련 뭐든 물어보세요 😊</div>';
   }
@@ -3381,8 +3399,8 @@ async function saveGeminiKeyAndRender() {
   await dbPut("geminiKey", k);
   render();
 }
-function changeGeminiKey() { saveGeminiKey(""); aiHistory = []; render(); }
-function resetAIChat() { aiHistory = []; render(); }
+function changeGeminiKey() { saveGeminiKey(""); aiHistories = {}; render(); }
+function resetAIChat() { setAiHistory([]); render(); }
 
 async function sendAIMessage() {
   const input = document.getElementById("ai-input");
@@ -3392,22 +3410,45 @@ async function sendAIMessage() {
   const key = getGeminiKey();
   if (!key) return;
   const todayKey = fmtKey(new Date());
-  const todayEntries = entries.filter(e => e.date === todayKey);
-  const todayKcal = todayEntries.reduce((s,e) => s + e.calories, 0);
-  const todayBurned = exercises.filter(e => e.date === todayKey).reduce((s,e) => s + e.burned, 0);
-  const netKcal = todayKcal - todayBurned;
-  const memberName = view !== "all" ? view : "멤버";
+  const aiHistory = getAiHistory();
   const isFirst = aiHistory.length === 0;
-  const systemCtx = isFirst
-    ? "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
-      "현재 사용자: " + memberName + "\n" +
-      "오늘 섭취: " + todayKcal + "kcal / 운동 소모: " + todayBurned + "kcal / 순칼로리: " + netKcal + "kcal\n" +
-      "오늘 먹은 것: " + (todayEntries.map(e => e.food + "(" + e.calories + "kcal)").join(", ") || "없음") + "\n" +
-      "짧고 친근하게 한국어로 답변해요. 이모지 적절히 사용해요.\n\n"
-    : "";
+  let systemCtx = "";
+  if (isFirst) {
+    if (view === "all") {
+      // 전체 모임 현황
+      const memberStats = members.map(m => {
+        const mEntries = entries.filter(e => e.member === m.name && e.date === todayKey);
+        const mKcal = mEntries.reduce((s,e) => s + e.calories, 0);
+        const mBurned = exercises.filter(e => e.member === m.name && e.date === todayKey).reduce((s,e) => s + e.burned, 0);
+        return m.name + ": " + mKcal + "kcal 섭취" + (mBurned > 0 ? " / 운동 -" + mBurned + "kcal" : "") + (mKcal === 0 ? " (미기록)" : "");
+      }).join("\n");
+      systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
+        "오늘 모임 전체 현황:\n" + memberStats + "\n" +
+        "짧고 친근하게 한국어로 답변해요. 이모지 적절히 사용해요.\n\n";
+    } else {
+      // 개인 현황
+      const mEntries = entries.filter(e => e.member === view && e.date === todayKey);
+      const mKcal = mEntries.reduce((s,e) => s + e.calories, 0);
+      const mBurned = exercises.filter(e => e.member === view && e.date === todayKey).reduce((s,e) => s + e.burned, 0);
+      const netKcal = mKcal - mBurned;
+      const foods = mEntries.map(e => e.food + "(" + e.calories + "kcal)").join(", ") || "없음";
+      // 이번 주 요약
+      const wr = getWeekRange(new Date());
+      const weekEntries2 = entries.filter(e => e.member === view && new Date(e.timestamp) >= wr.start && new Date(e.timestamp) <= wr.end);
+      const weekKcal = weekEntries2.reduce((s,e) => s + e.calories, 0);
+      const weekDays = new Set(weekEntries2.map(e => e.date)).size;
+      systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
+        "현재 사용자: " + view + "\n" +
+        "오늘 섭취: " + mKcal + "kcal / 운동 소모: " + mBurned + "kcal / 순칼로리: " + netKcal + "kcal\n" +
+        "오늘 먹은 것: " + foods + "\n" +
+        "이번 주: " + weekDays + "일 기록 / 총 " + weekKcal.toLocaleString() + "kcal\n" +
+        "짧고 친근하게 한국어로 답변해요. 이모지 적절히 사용해요.\n\n";
+    }
+  }
   const apiText = systemCtx + text;
   // 표시용 (시스템 컨텍스트 제외)
   aiHistory.push({ role: "user", parts: [{ text: apiText }], displayText: text });
+  setAiHistory(aiHistory);
   aiTyping = true;
   input.value = "";
   render();
@@ -3422,8 +3463,10 @@ async function sendAIMessage() {
     if (data.error) throw new Error(data.error.message);
     const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "답변을 가져오지 못했어요.";
     aiHistory.push({ role: "model", parts: [{ text: reply }], displayText: reply });
+    setAiHistory(aiHistory);
   } catch(e) {
     aiHistory.push({ role: "model", parts: [{ text: "오류: " + e.message }], displayText: "오류: " + e.message });
+    setAiHistory(aiHistory);
   }
   aiTyping = false;
   render();
