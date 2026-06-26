@@ -593,7 +593,16 @@ function render() {
       '<span id="summary-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.summary ? '▼' : '▲') + '</span></div>';
     html += '<div id="summary-card" style="display:' + (cardCollapsed.summary ? 'none' : 'block') + '">';
     html += '<div class="big"><b class="tnum">' + totalKcal.toLocaleString() + '</b><span>kcal</span></div>';
-    if (isMonth) html += '<div class="avg tnum">기록한 ' + monthGroups.length + '일 · 하루 평균 ' + monthAvg.toLocaleString() + ' kcal</div>';
+    if (isMonth) {
+      const monthBurned = exercises.filter(e => e.date.startsWith(monthPrefix) && (view === "all" || e.member === view)).reduce((s,e) => s + e.burned, 0);
+      html += '<div class="avg tnum">기록한 ' + monthGroups.length + '일 · 하루 평균 ' + monthAvg.toLocaleString() + ' kcal' + (monthBurned > 0 ? ' · 운동 -' + monthBurned.toLocaleString() + ' kcal' : '') + '</div>';
+    }
+    if (isWeek) {
+      const wr = getWeekRange(date);
+      const weekBurned = exercises.filter(e => { const d = new Date(e.timestamp); return d >= wr.start && d <= wr.end && (view === "all" || e.member === view); }).reduce((s,e) => s + e.burned, 0);
+      const weekDayCount = new Set(weekEntries.map(e => e.date)).size;
+      html += '<div class="avg tnum">기록한 ' + weekDayCount + '일' + (weekBurned > 0 ? ' · 운동 -' + weekBurned.toLocaleString() + ' kcal' : '') + '</div>';
+    }
     if (view === "all" && perMember.length) {
       html += '<div class="bars">';
       perMember.forEach(p => {
@@ -858,6 +867,7 @@ function exerciseCard(e) {
     '<div class="mid"><div class="food">' + esc(e.type) + ' ' + e.minutes + '분</div>' +
     '<div class="meta">' + esc(e.member) + ' · ' + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum" style="color:#4CAF50">-' + e.burned.toLocaleString() + '<small> kcal</small></span>' +
+    '<button class="del" onclick="event.stopPropagation();openEditExercise(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
     '<button class="del" onclick="removeExercise(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
 }
 
@@ -2951,6 +2961,69 @@ async function removeExercise(id) {
   await dbDelete(seasonPath("exercises") + "/" + id);
   await loadAll(); render();
 }
+
+function openEditExercise(id) {
+  const ex = exercises.find(e => e.id === id);
+  if (!ex) return;
+  const m = document.getElementById("modal");
+  const cats = [...new Set(EXERCISE_DB.map(e => e.cat))];
+  const opts = cats.map(cat => {
+    const items = EXERCISE_DB.filter(e => e.cat === cat);
+    return '<optgroup label="' + cat + '">' +
+      items.map(e => '<option value="' + EXERCISE_DB.indexOf(e) + '"' + (e.k === ex.type ? ' selected' : '') + '>' + e.k + ' (MET ' + e.met + ')</option>').join("") +
+      '</optgroup>';
+  }).join("");
+  const myWeight = getMyWeight(ex.member);
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>운동 수정</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<label class="flabel">체중 (kg)</label>' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+    '<input class="ti num" id="edit-ex-weight" inputmode="decimal" value="' + myWeight + '" style="flex:1" />' +
+    '<span style="font-size:15px;font-weight:700;color:var(--muted)">kg</span></div>' +
+    '<label class="flabel">운동 종류</label>' +
+    '<select class="ti" id="edit-ex-type">' + opts + '</select>' +
+    '<label class="flabel">시간 (분)</label>' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+    '<input class="ti num" id="edit-ex-min" inputmode="numeric" value="' + ex.minutes + '" style="flex:1" />' +
+    '<span style="font-size:15px;font-weight:700;color:var(--muted)">분</span></div>' +
+    '<div id="edit-ex-preview" style="margin-top:10px;padding:12px 16px;border-radius:14px;background:var(--bg);border:1px solid var(--line);font-size:14px;font-weight:700;color:#4CAF50;text-align:center">-' + ex.burned.toLocaleString() + ' kcal</div>' +
+    '<button class="save" onclick="submitEditExercise(\'' + id + '\')">' + iconCheck() + ' 저장하기</button>' +
+    '</div></div>';
+
+  const minInp = document.getElementById("edit-ex-min");
+  const weightInp = document.getElementById("edit-ex-weight");
+  const typeInp = document.getElementById("edit-ex-type");
+  const preview = document.getElementById("edit-ex-preview");
+  function updatePreview() {
+    const mins = parseInt(minInp.value) || 0;
+    const weight = parseFloat(weightInp.value) || 60;
+    const idx = parseInt(typeInp.value);
+    const exItem = EXERCISE_DB[idx];
+    if (mins > 0 && exItem) {
+      const burned = Math.round(exItem.met * weight * (mins / 60));
+      preview.innerHTML = '🔥 약 <b>' + burned + ' kcal</b> 소모 예상<br><span style="font-size:12px;color:var(--muted)">' + exItem.k + ' · MET ' + exItem.met + ' · ' + weight + 'kg · ' + mins + '분</span>';
+    }
+  }
+  minInp.addEventListener("input", () => { minInp.value = minInp.value.replace(/[^0-9]/g,""); updatePreview(); });
+  weightInp.addEventListener("input", updatePreview);
+  typeInp.addEventListener("change", updatePreview);
+}
+
+async function submitEditExercise(id) {
+  const mins = parseInt(document.getElementById("edit-ex-min").value) || 0;
+  if (!mins) { alert("시간을 입력해주세요!"); return; }
+  const weight = parseFloat(document.getElementById("edit-ex-weight").value) || 60;
+  const idx = parseInt(document.getElementById("edit-ex-type").value);
+  const exItem = EXERCISE_DB[idx];
+  const burned = Math.round(exItem.met * weight * (mins / 60));
+  saveMyWeight(exercises.find(e => e.id === id)?.member, weight);
+  await dbPut(seasonPath("exercises") + "/" + id + "/type", exItem.k);
+  await dbPut(seasonPath("exercises") + "/" + id + "/minutes", mins);
+  await dbPut(seasonPath("exercises") + "/" + id + "/burned", burned);
+  await dbPut(seasonPath("exercises") + "/" + id + "/met", exItem.met);
+  closeModal();
+  await loadAll(); render();
+}
 function openSeasonMenu() {
   const m = document.getElementById("modal");
   const seasonList = [
@@ -4065,7 +4138,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb });
 
 start();
 </script>
