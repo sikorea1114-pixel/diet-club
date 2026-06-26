@@ -287,7 +287,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -297,7 +297,8 @@ async function loadAll() {
     currentSeasonId === "default" ? dbGet("meetDate") : dbGet("seasons/" + currentSeasonId + "/meetDate"),
     currentSeasonId === "default" ? dbGet("hall") : dbGet("seasons/" + currentSeasonId + "/hall"),
     dbGet(seasonPath("exercises")),
-    dbGet("geminiKey")
+    dbGet("geminiKey"),
+    dbGet("aiChat")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -309,6 +310,10 @@ async function loadAll() {
   hall = h || null;
   exercises = ex ? Object.values(ex) : [];
   if (gk) geminiKey = gk;
+  // 전체 AI 대화 Firebase에서 복원
+  if (ac && Array.isArray(ac)) {
+    aiHistories["all"] = ac.map(m => ({ role: m.role, parts: [{ text: m.text }], displayText: m.text }));
+  }
   loaded = true;
 }
 
@@ -3310,7 +3315,9 @@ function renderHealthCard() {
 }
 
 // ── AI 채팅 ──
-let aiHistories = {}; // 멤버별 대화 히스토리
+let aiHistories = (function() {
+  try { return JSON.parse(localStorage.getItem("dietclub_ai_histories") || "{}"); } catch { return {}; }
+})();
 let aiTyping = false;
 
 function getAiHistory() {
@@ -3318,9 +3325,16 @@ function getAiHistory() {
   if (!aiHistories[key]) aiHistories[key] = [];
   return aiHistories[key];
 }
-function setAiHistory(msgs) {
+async function setAiHistory(msgs) {
   const key = view || "all";
   aiHistories[key] = msgs;
+  if (key === "all") {
+    // 전체 대화는 Firebase에 저장
+    try { await dbPut("aiChat", msgs.map(m => ({ role: m.role, text: m.displayText || m.parts[0].text }))); } catch {}
+  } else {
+    // 개인 대화는 localStorage에 저장
+    try { localStorage.setItem("dietclub_ai_histories", JSON.stringify(aiHistories)); } catch {}
+  }
 }
 
 let geminiKey = "";
@@ -3400,7 +3414,10 @@ async function saveGeminiKeyAndRender() {
   render();
 }
 function changeGeminiKey() { saveGeminiKey(""); aiHistories = {}; render(); }
-function resetAIChat() { setAiHistory([]); render(); }
+async function resetAIChat() {
+  await setAiHistory([]);
+  render();
+}
 
 async function sendAIMessage() {
   const input = document.getElementById("ai-input");
