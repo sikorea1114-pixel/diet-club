@@ -3384,7 +3384,7 @@ function renderAIHtml() {
     html += '<div style="display:flex;justify-content:flex-start"><div style="padding:12px 16px;border-radius:18px 18px 18px 4px;background:var(--surface);border:1px solid var(--line);font-size:20px">💭</div></div>';
   }
   html += '</div>';
-  html += '<div style="position:fixed;bottom:100px;left:50%;transform:translateX(-50%);width:calc(100% - 44px);max-width:436px;display:flex;gap:8px;background:var(--bg);padding:8px 0">';
+  html += '<div style="position:sticky;bottom:0;left:0;right:0;display:flex;gap:8px;background:var(--bg);padding:12px 0 8px;margin-top:8px">';
   html += '<input class="ti" id="ai-input" placeholder="다이어트 질문을 입력하세요..." style="flex:1;margin:0;font-size:15px" onkeydown="if(event.key==\'Enter\')sendAIMessage()" />';
   html += '<button onclick="sendAIMessage()" style="padding:0 18px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:20px;flex-shrink:0">↑</button>';
   html += '</div>';
