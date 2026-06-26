@@ -325,7 +325,6 @@ async function loadAll() {
   }
   weeklyRecords = wr2 || {};
   loaded = true;
-  await autoSaveLastWeek();
 }
 
 // ── 액션 ──
@@ -1053,7 +1052,7 @@ function copyInvite() {
 async function start() {
   if (!DB_URL) { renderSetup(); return; }
   render();
-  try { await loadAll(); render(); }
+  try { await loadAll(); await autoSaveLastWeek(); render(); }
   catch (e) {
     // 연결 실패해도 기존 데이터 유지, loaded만 true로
     if (!loaded) { loaded = true; render(); }
@@ -3138,9 +3137,15 @@ function renderWeeklyHistoryHtml() {
     return html;
   }
   const medals = ['🥇','🥈','🥉'];
-  records.forEach(r => {
+  records.forEach((r, idx) => {
+    const uid = "history-" + r.weekKey;
+    const isOpen = openedDays.has(uid);
     html += '<div class="card" style="margin-bottom:0">';
-    html += '<div style="font-size:13px;font-weight:800;color:var(--ink);margin-bottom:12px">📅 ' + esc(r.weekLabel) + '</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleWeekDay(\'' + uid + '\')">';
+    html += '<div style="font-size:13px;font-weight:800;color:var(--ink)">📅 ' + esc(r.weekLabel) + '</div>';
+    html += '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isOpen ? '▲' : '▼') + '</span>';
+    html += '</div>';
+    html += '<div id="' + uid + '" style="display:' + (isOpen ? 'block' : 'none') + ';margin-top:12px">';
     // 먹방왕
     if (r.mukbang && r.mukbang.length > 0) {
       html += '<div style="margin-bottom:10px">';
@@ -3174,7 +3179,7 @@ function renderWeeklyHistoryHtml() {
       });
       html += '</div>';
     }
-    html += '</div>';
+    html += '</div></div>';
   });
   html += '</div>';
   return html;
