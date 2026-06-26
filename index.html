@@ -624,7 +624,7 @@ function render() {
         html += '<div id="streak-card" style="display:' + (cardCollapsed.streak ? 'none' : 'block') + '">';
         html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
         streaks.sort((a,b) => b.streak - a.streak).forEach(s => {
-          const flames = s.streak >= 7 ? '🔥🔥🔥' : s.streak >= 3 ? '🔥🔥' : '🔥';
+          const flames = streakEmoji(s.streak);
           html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
             '<span style="font-size:14px;font-weight:700">' + esc(s.name) + '</span>' +
             '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + flames + ' ' + s.streak + '일 연속</span>' +
@@ -633,20 +633,36 @@ function render() {
         html += '</div></div></div>';
       }
 
-      // MVP 카드
+      // MVP 카드 (이번 주 다이어트 점수 기준)
       const wr2 = getWeekRange(new Date());
+      const weekDaysArr = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(wr2.start);
+        d.setDate(wr2.start.getDate() + i);
+        weekDaysArr.push(fmtKey(d));
+      }
       const mvpData = members.map(m => {
-        const wEntries = entries.filter(e => {
-          const d = new Date(e.timestamp);
-          return d >= wr2.start && d <= wr2.end && e.member === m.name && e.calories > 0;
+        let score = 0;
+        let recordDays = 0;
+        let exDays = 0;
+        weekDaysArr.forEach(d => {
+          const dayEntries = entries.filter(e => e.member === m.name && e.date === d);
+          const dayKcal = dayEntries.reduce((s,e) => s + e.calories, 0);
+          if (dayKcal === 0) return;
+          const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
+          const netKcal = dayKcal - dayBurned;
+          score += 10; // 기록일 +10
+          if (netKcal <= 1500) score += 5; // 1500 이하 +5
+          if (netKcal > 2000) score -= 5;  // 2000 초과 -5
+          recordDays++;
         });
-        const days = new Set(wEntries.map(e => e.date)).size;
-        const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
-        return { name: m.name, days, kcal };
-      }).filter(m => m.days > 0);
+        const exDaysSet = new Set(exercises.filter(e => e.member === m.name && weekDaysArr.includes(e.date)).map(e => e.date));
+        exDays = exDaysSet.size;
+        score += exDays * 5; // 운동일 +5
+        return { name: m.name, score, recordDays, exDays };
+      }).filter(m => m.recordDays > 0).sort((a,b) => b.score - a.score);
 
       if (mvpData.length > 0) {
-        mvpData.sort((a, b) => b.days !== a.days ? b.days - a.days : a.kcal - b.kcal);
         const mvp = mvpData[0];
         html += '<div class="card" style="margin-top:0">';
         html += '<div class="sub" onclick="toggleWeekDay(\'mvp-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">🏆 이번 주 MVP<span id="mvp-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.mvp ? '▼' : '▲') + '</span></div>';
@@ -656,7 +672,7 @@ function render() {
         html += '<span style="width:46px;height:46px;border-radius:14px;background:' + mc + '22;color:' + mc + ';display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
         html += '<div style="flex:1">' +
           '<div style="font-size:17px;font-weight:800">' + esc(mvp.name) + ' 👑</div>' +
-          '<div style="font-size:12px;color:var(--muted);margin-top:3px">' + mvp.days + '일 기록 · ' + mvp.kcal.toLocaleString() + ' kcal</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:3px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록 · 운동 ' + mvp.exDays + '일</div>' +
           '</div>';
         html += '</div>';
         if (mvpData.length > 1) {
@@ -664,7 +680,7 @@ function render() {
           mvpData.slice(1).forEach((m, i) => {
             html += '<div style="display:flex;justify-content:space-between;font-size:13px">' +
               '<span style="color:var(--muted)">' + (i+2) + '위 ' + esc(m.name) + '</span>' +
-              '<span style="color:var(--muted);font-weight:700">' + m.days + '일 · ' + m.kcal.toLocaleString() + ' kcal</span>' +
+              '<span style="color:var(--muted);font-weight:700">' + m.score + '점 · ' + m.recordDays + '일 · 운동 ' + m.exDays + '일</span>' +
               '</div>';
           });
           html += '</div>';
@@ -679,7 +695,7 @@ function render() {
   html += '<button class="chip ' + (view==="all"?"on":"") + '" onclick="setView(\'all\')">전체</button>';
   members.forEach(m => {
     const streak = calcStreak(m.name);
-    const streakBadge = streak >= 2 ? ' <span style="font-size:12px">🔥' + streak + '</span>' : '';
+    const streakBadge = streak >= 2 ? ' <span style="font-size:12px">' + streakEmoji(streak) + streak + '</span>' : '';
     html += '<button class="chip ' + (view===m.name?"on":"") + '" onclick="setView(\'' + esc(m.name).replace(/'/g,"\\'") + '\')">' +
       '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + streakBadge + '</button>';
   });
@@ -3940,6 +3956,13 @@ async function submitAddOption(pollId) {
 }
 
 // ── 스트릭 계산 ──
+function streakEmoji(n) {
+  if (n >= 30) return '👑';
+  if (n >= 21) return '💎';
+  if (n >= 14) return '⭐';
+  if (n >= 7)  return '🔥🔥';
+  return '🔥';
+}
 function calcStreak(memberName) {
   const dates = [...new Set(
     entries.filter(e => e.member === memberName).map(e => e.date)
