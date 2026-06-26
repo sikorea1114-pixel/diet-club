@@ -3326,6 +3326,10 @@ function saveGeminiKey(k) {
 function renderAIHtml() {
   const key = getGeminiKey();
   let html = '<div class="list" style="padding-bottom:180px">';
+  if (!loaded) {
+    html += '<div class="empty">불러오는 중…</div></div>';
+    return html;
+  }
   if (!key) {
     html += '<div class="card">' +
       '<div style="font-size:16px;font-weight:800;margin-bottom:8px">🤖 AI 다이어트 상담</div>' +
