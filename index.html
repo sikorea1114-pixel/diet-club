@@ -437,8 +437,7 @@ function render() {
   const hasNewCommunity = (hasNewNotice && !isNotice) || (hasNewPoll && !isVote);
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
-    const d = new Date(e.timestamp);
-    return d >= wr.start && d <= wr.end &&
+    return e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) &&
       (view === "all" || e.member === view);
   }).sort((a,b) => b.timestamp - a.timestamp);
 
@@ -486,61 +485,16 @@ function render() {
       '<button onclick="setMode(\'month\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="month"?"var(--ink)":"var(--line)") + ';background:' + (mode==="month"?"var(--ink)":"transparent") + ';color:' + (mode==="month"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">월별</button>' +
       '</div>';
   } else {
-  html += `
-    <div style="display:flex;gap:6px;padding:10px 22px 0">
-
-      <button
-        onclick="setMode('notice')"
-        style="flex:1;padding:8px;border-radius:10px;
-        border:1px solid ${mode==="notice"?"var(--ink)":"var(--line)"};
-        background:${mode==="notice"?"var(--ink)":"transparent"};
-        color:${mode==="notice"?"#fff":"var(--muted)"};
-        font-size:13px;font-weight:700;position:relative">
-        📌 공지
-        ${
-          hasNewNotice && mode !== "notice"
-            ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>'
-            : ''
-        }
-      </button>
-
-      <button
-        onclick="setMode('mukbang')"
-        style="flex:1;padding:8px;border-radius:10px;
-        border:1px solid ${isMukbang?"var(--ink)":"var(--line)"};
-        background:${isMukbang?"var(--ink)":"transparent"};
-        color:${isMukbang?"#fff":"var(--muted)"};
-        font-size:13px;font-weight:700">
-        🏆 랭킹
-      </button>
-
-      <button
-        onclick="setMode('vote')"
-        style="flex:1;padding:8px;border-radius:10px;
-        border:1px solid ${mode==="vote"?"var(--ink)":"var(--line)"};
-        background:${mode==="vote"?"var(--ink)":"transparent"};
-        color:${mode==="vote"?"#fff":"var(--muted)"};
-        font-size:13px;font-weight:700;position:relative">
-        🗳️ 투표
-        ${
-          hasNewPoll && mode !== "vote"
-            ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>'
-            : ''
-        }
-      </button>
-
-      <button
-        onclick="setMode('ai')"
-        style="flex:1;padding:8px;border-radius:10px;
-        border:1px solid ${mode==="ai"?"var(--ink)":"var(--line)"};
-        background:${mode==="ai"?"var(--ink)":"transparent"};
-        color:${mode==="ai"?"#fff":"var(--muted)"};
-        font-size:13px;font-weight:700">
-        🤖 AI
-      </button>
-
-    </div>
-  `;
+    html += '<div style="display:flex;gap:6px;padding:10px 22px 0">' +
+      '<button onclick="setMode(\'vote\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="vote"?"var(--ink)":"var(--line)") + ';background:' + (mode==="vote"?"var(--ink)":"transparent") + ';color:' + (mode==="vote"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">🗳️ 투표' +
+      (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+      '</button>' +
+      '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
+      (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+      '</button>' +
+      '<button onclick="setMode(\'ai\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="ai"?"var(--ink)":"var(--line)") + ';background:' + (mode==="ai"?"var(--ink)":"transparent") + ';color:' + (mode==="ai"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🤖 AI</button>' +
+      '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (isMukbang?"var(--ink)":"var(--line)") + ';background:' + (isMukbang?"var(--ink)":"transparent") + ';color:' + (isMukbang?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🏆 랭킹</button>' +
+      '</div>';
   }
 
   if (isRecord) {
@@ -572,7 +526,7 @@ function render() {
     }
     if (isWeek) {
       const wrW = getWeekRange(date);
-      const weekBurned = exercises.filter(e => { const d = new Date(e.timestamp); return d >= wrW.start && d <= wrW.end && (view === "all" || e.member === view); }).reduce((s,e) => s + e.burned, 0);
+      const weekBurned = exercises.filter(e => e.date >= fmtKey(wrW.start) && e.date <= fmtKey(wrW.end) && (view === "all" || e.member === view)).reduce((s,e) => s + e.burned, 0);
       const weekDayCount = new Set(weekEntries.map(e => e.date)).size;
       html += '<div class="avg tnum">기록한 ' + weekDayCount + '일' + (weekBurned > 0 ? ' · 운동 -' + weekBurned.toLocaleString() + ' kcal' : '') + '</div>';
     }
@@ -3071,19 +3025,16 @@ async function autoSaveLastWeek() {
   if (weeklyRecords[lastWeekKey]) return;
   const lwr = getWeekRange(lastWeekDate);
   // 지난 주 데이터가 있는지 확인
-  const hasData = entries.some(e => {
-    const d = new Date(e.timestamp);
-    return d >= lwr.start && d <= lwr.end;
-  });
+  const hasData = entries.some(e => e.date >= fmtKey(lwr.start) && e.date <= fmtKey(lwr.end));
   if (!hasData) return;
   // 먹방왕
   const mukData = members.map(m => {
-    const wEntries = entries.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
+    const wEntries = entries.filter(e => e.date >= fmtKey(lwr.start) && e.date <= fmtKey(lwr.end) && e.member === m.name);
     return { name: m.name, kcal: wEntries.reduce((s,e) => s + e.calories, 0) };
   }).filter(m => m.kcal > 0).sort((a,b) => b.kcal - a.kcal);
   // 운동왕
   const exData2 = members.map(m => {
-    const mEx = exercises.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
+    const mEx = exercises.filter(e => e.date >= fmtKey(lwr.start) && e.date <= fmtKey(lwr.end) && e.member === m.name);
     return { name: m.name, burned: mEx.reduce((s,e) => s + e.burned, 0) };
   }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
   // 건강왕
@@ -3326,19 +3277,14 @@ function renderMukbangHtml() {
   const wr = getWeekRange(new Date());
   let html = '<div class="list" style="padding-bottom:100px">';
   const weekData = members.map(m => {
-    const wEntries = entries.filter(e => {
-      const d = new Date(e.timestamp);
-      return d >= wr.start && d <= wr.end && e.member === m.name;
-    });
+    const wEntries = entries.filter(e => e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) && e.member === m.name);
     const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
     const days = new Set(wEntries.map(e => e.date)).size;
     return { name: m.name, kcal, days };
   }).filter(m => m.kcal > 0).sort((a, b) => b.kcal - a.kcal);
   if (weekData.length === 0) {
-    html += '<div class="empty">이번 주 기록이 없어요.</div>';
-    html += '</div>';
-    return html;
-  }
+    html += '<div class="empty" style="padding:20px 0">이번 주 칼로리 기록이 없어요.</div>';
+  } else {
   // 다이어트 점수 카드
   const scoreData = members.map(m => {
     const mEntries = entries.filter(e => e.member === m.name);
@@ -3394,12 +3340,11 @@ function renderMukbangHtml() {
     html += '</div></div>';
   }
 
+  }  // end if weekData.length === 0 else
+
 // 운동왕 섹션 (자주 먹은 음식보다 위)
   const exData = members.map(m => {
-    const mEx = exercises.filter(e => {
-      const d = new Date(e.timestamp);
-      return d >= wr.start && d <= wr.end && e.member === m.name;
-    });
+    const mEx = exercises.filter(e => e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) && e.member === m.name);
     const burned = mEx.reduce((s,e) => s + e.burned, 0);
     const count = mEx.length;
     const types = mEx.map(e => e.type);
@@ -3787,7 +3732,7 @@ async function sendAIMessage() {
       const foods = mEntries.map(e => e.food + "(" + e.calories + "kcal)").join(", ") || "없음";
       // 이번 주 요약
       const wr = getWeekRange(new Date());
-      const weekEntries2 = entries.filter(e => e.member === view && new Date(e.timestamp) >= wr.start && new Date(e.timestamp) <= wr.end);
+      const weekEntries2 = entries.filter(e => e.member === view && e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end));
       const weekKcal = weekEntries2.reduce((s,e) => s + e.calories, 0);
       const weekDays = new Set(weekEntries2.map(e => e.date)).size;
       systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
