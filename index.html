@@ -3022,32 +3022,53 @@ async function autoSaveLastWeek() {
   const lastWeekDate = new Date(today);
   lastWeekDate.setDate(today.getDate() - 7);
   const lastWeekKey = getWeekKey(lastWeekDate);
-  // 이미 저장됐으면 스킵
   if (weeklyRecords[lastWeekKey]) return;
   const lwr = getWeekRange(lastWeekDate);
-  // 지난 주 데이터가 있는지 확인
-  const hasData = entries.some(e => {
-    const d = new Date(e.timestamp);
-    return d >= lwr.start && d <= lwr.end;
-  });
+  const lwrStartKey = fmtKey(lwr.start);
+  const lwrEndKey = fmtKey(lwr.end);
+  const hasData = entries.some(e => e.date >= lwrStartKey && e.date <= lwrEndKey);
   if (!hasData) return;
+
   // 먹방왕
   const mukData = members.map(m => {
-    const wEntries = entries.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
+    const wEntries = entries.filter(e => e.date >= lwrStartKey && e.date <= lwrEndKey && e.member === m.name);
     return { name: m.name, kcal: wEntries.reduce((s,e) => s + e.calories, 0) };
   }).filter(m => m.kcal > 0).sort((a,b) => b.kcal - a.kcal);
+
   // 운동왕
   const exData2 = members.map(m => {
-    const mEx = exercises.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
+    const mEx = exercises.filter(e => e.date >= lwrStartKey && e.date <= lwrEndKey && e.member === m.name);
     return { name: m.name, burned: mEx.reduce((s,e) => s + e.burned, 0) };
   }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
-  // 건강왕
+
+  // MVP (다이어트 점수 기준)
   const weekDays2 = [];
   for (let i = 0; i < 7; i++) {
-    const d = new Date(lwr.start);
-    d.setDate(lwr.start.getDate() + i);
+    const d = new Date(lwr.start); d.setDate(lwr.start.getDate() + i);
     weekDays2.push(fmtKey(d));
   }
+  const mvpData = members.map(m => {
+    let score = 0, recordDays = 0;
+    weekDays2.forEach(d => {
+      const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.calories, 0);
+      if (!dayKcal) return;
+      const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
+      const netKcal = dayKcal - dayBurned;
+      score += 10;
+      if (netKcal <= 1500) score += 5;
+      if (netKcal > 2000) score -= 5;
+      recordDays++;
+    });
+    const exDays = new Set(exercises.filter(e => e.member === m.name && weekDays2.includes(e.date)).map(e => e.date)).size;
+    score += exDays * 5;
+    const warningCount = (warnings[m.name] || {}).count || 0;
+    const thumbCount = (thumbs[m.name] || {}).count || 0;
+    score -= warningCount * 3;
+    score += thumbCount * 3;
+    return { name: m.name, score, recordDays };
+  }).filter(m => m.recordDays > 0).sort((a,b) => b.score - a.score);
+
+  // 건강왕
   const healthData = members.map(m => {
     const profile = getMyProfile(m.name);
     if (!profile) return null;
@@ -3071,6 +3092,7 @@ async function autoSaveLastWeek() {
   const record = {
     weekKey: lastWeekKey,
     weekLabel: fmtDateHeader(lastWeekKey) + " ~ " + fmtDateHeader(fmtKey(lwr.end)),
+    mvp: mvpData.slice(0, 3),
     mukbang: mukData.slice(0,3),
     exercise: exData2.slice(0,3),
     health: healthData.slice(0,3),
@@ -3080,14 +3102,29 @@ async function autoSaveLastWeek() {
   await dbPut(seasonPath("weeklyRecords") + "/" + lastWeekKey, record);
 }
 
-// ── 역대 랭킹 렌더링 ──
+async function forceResaveLastWeek() {
+  const today = new Date();
+  const lastWeekDate = new Date(today);
+  lastWeekDate.setDate(today.getDate() - 7);
+  const lastWeekKey = getWeekKey(lastWeekDate);
+  // 기존 기록 삭제 후 재저장
+  delete weeklyRecords[lastWeekKey];
+  await dbDelete(seasonPath("weeklyRecords") + "/" + lastWeekKey);
+  await autoSaveLastWeek();
+  await loadAll(); render();
+}
 function renderWeeklyHistoryHtml() {
   const records = Object.values(weeklyRecords).sort((a,b) => b.weekKey.localeCompare(a.weekKey));
   let html = '<div class="list" style="padding-bottom:100px">';
   if (records.length === 0) {
     html += '<div class="empty">아직 지난 주 기록이 없어요.<br>다음 주 월요일에 자동 저장돼요!</div>';
+    if (view === "이성호") html += '<div style="text-align:center;margin-top:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:10px 20px;border-radius:12px">🔄 지난 주 기록 저장</button></div>';
     html += '</div>';
     return html;
+  }
+  // 이성호 전용 재저장 버튼
+  if (view === "이성호") {
+    html += '<div style="text-align:center;margin-bottom:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:8px 16px;border-radius:10px">🔄 지난 주 기록 재저장</button></div>';
   }
   const medals = ['🥇','🥈','🥉'];
   records.forEach((r, idx) => {
@@ -3099,6 +3136,25 @@ function renderWeeklyHistoryHtml() {
     html += '<span id="' + uid + '-arrow" style="font-size:12px;color:var(--muted)">' + (isOpen ? '▲' : '▼') + '</span>';
     html += '</div>';
     html += '<div id="' + uid + '" style="display:' + (isOpen ? 'block' : 'none') + ';margin-top:12px">';
+    // MVP 크게 표시
+    if (r.mvp && r.mvp.length > 0) {
+      const mvp = r.mvp[0];
+      const mc = colorOf(mvp.name);
+      html += '<div style="display:flex;align-items:center;gap:12px;padding:14px;background:var(--accent);border-radius:14px;margin-bottom:12px">';
+      html += '<span style="width:46px;height:46px;border-radius:14px;background:rgba(255,255,255,0.2);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
+      html += '<div style="flex:1"><div style="font-size:16px;font-weight:800;color:#fff">' + esc(mvp.name) + ' 👑 MVP</div>';
+      html += '<div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록</div></div>';
+      html += '</div>';
+      if (r.mvp.length > 1) {
+        html += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">';
+        r.mvp.slice(1).forEach((m, i) => {
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px">' +
+            '<span style="color:var(--muted)">' + medals[i+1] + ' ' + esc(m.name) + '</span>' +
+            '<span style="color:var(--muted);font-weight:700">' + m.score + '점</span></div>';
+        });
+        html += '</div>';
+      }
+    }
     // 먹방왕
     if (r.mukbang && r.mukbang.length > 0) {
       html += '<div style="margin-bottom:10px">';
@@ -4082,7 +4138,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
 
 start();
 </script>
