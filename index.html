@@ -437,7 +437,8 @@ function render() {
   const hasNewCommunity = (hasNewNotice && !isNotice) || (hasNewPoll && !isVote);
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
-    return e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) &&
+    const d = new Date(e.timestamp);
+    return d >= wr.start && d <= wr.end &&
       (view === "all" || e.member === view);
   }).sort((a,b) => b.timestamp - a.timestamp);
 
@@ -526,7 +527,7 @@ function render() {
     }
     if (isWeek) {
       const wrW = getWeekRange(date);
-      const weekBurned = exercises.filter(e => e.date >= fmtKey(wrW.start) && e.date <= fmtKey(wrW.end) && (view === "all" || e.member === view)).reduce((s,e) => s + e.burned, 0);
+      const weekBurned = exercises.filter(e => { const d = new Date(e.timestamp); return d >= wrW.start && d <= wrW.end && (view === "all" || e.member === view); }).reduce((s,e) => s + e.burned, 0);
       const weekDayCount = new Set(weekEntries.map(e => e.date)).size;
       html += '<div class="avg tnum">기록한 ' + weekDayCount + '일' + (weekBurned > 0 ? ' · 운동 -' + weekBurned.toLocaleString() + ' kcal' : '') + '</div>';
     }
@@ -3025,16 +3026,19 @@ async function autoSaveLastWeek() {
   if (weeklyRecords[lastWeekKey]) return;
   const lwr = getWeekRange(lastWeekDate);
   // 지난 주 데이터가 있는지 확인
-  const hasData = entries.some(e => e.date >= fmtKey(lwr.start) && e.date <= fmtKey(lwr.end));
+  const hasData = entries.some(e => {
+    const d = new Date(e.timestamp);
+    return d >= lwr.start && d <= lwr.end;
+  });
   if (!hasData) return;
   // 먹방왕
   const mukData = members.map(m => {
-    const wEntries = entries.filter(e => e.date >= fmtKey(lwr.start) && e.date <= fmtKey(lwr.end) && e.member === m.name);
+    const wEntries = entries.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
     return { name: m.name, kcal: wEntries.reduce((s,e) => s + e.calories, 0) };
   }).filter(m => m.kcal > 0).sort((a,b) => b.kcal - a.kcal);
   // 운동왕
   const exData2 = members.map(m => {
-    const mEx = exercises.filter(e => e.date >= fmtKey(lwr.start) && e.date <= fmtKey(lwr.end) && e.member === m.name);
+    const mEx = exercises.filter(e => { const d = new Date(e.timestamp); return d >= lwr.start && d <= lwr.end && e.member === m.name; });
     return { name: m.name, burned: mEx.reduce((s,e) => s + e.burned, 0) };
   }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
   // 건강왕
@@ -3277,15 +3281,15 @@ function renderMukbangHtml() {
   const wr = getWeekRange(new Date());
   let html = '<div class="list" style="padding-bottom:100px">';
   const weekData = members.map(m => {
-    const wEntries = entries.filter(e => e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) && e.member === m.name);
+    const wEntries = entries.filter(e => {
+      const d = new Date(e.timestamp);
+      return d >= wr.start && d <= wr.end && e.member === m.name;
+    });
     const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
     const days = new Set(wEntries.map(e => e.date)).size;
     return { name: m.name, kcal, days };
   }).filter(m => m.kcal > 0).sort((a, b) => b.kcal - a.kcal);
-  if (weekData.length === 0) {
-    html += '<div class="empty" style="padding:20px 0">이번 주 칼로리 기록이 없어요.</div>';
-  } else {
-  // 다이어트 점수 카드
+  // 다이어트 점수 카드 (먹방왕 데이터 없어도 항상 표시)
   const scoreData = members.map(m => {
     const mEntries = entries.filter(e => e.member === m.name);
     const mExercises = exercises.filter(e => e.member === m.name);
@@ -3340,8 +3344,6 @@ function renderMukbangHtml() {
     html += '</div></div>';
   }
 
-  }  // end if weekData.length === 0 else
-
 // 운동왕 섹션 (자주 먹은 음식보다 위)
   const exData = members.map(m => {
     const mEx = exercises.filter(e => e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) && e.member === m.name);
@@ -3385,30 +3387,34 @@ function renderMukbangHtml() {
     html += '</div>';
   }
 
-  const medals = ['🥇','🥈','🥉'];
-  const king = weekData[0];
-  html += '<div class="card">';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🍔 이번 주 먹방왕</div>';
-  html += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:14px;margin-bottom:16px">';
-  html += '<span style="font-size:32px">🍔</span>';
-  html += '<div style="flex:1">';
-  html += '<div style="font-size:17px;font-weight:800">' + esc(king.name) + ' 👑</div>';
-  html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">이번 주 ' + king.kcal.toLocaleString() + ' kcal · ' + king.days + '일 기록</div>';
-  html += '</div></div>';
-  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">이번 주 칼로리 순위</div>';
-  html += '<div style="display:flex;flex-direction:column;gap:10px">';
-  weekData.forEach((m, i) => {
-    const pct = Math.round(m.kcal / weekData[0].kcal * 100);
-    const medal = medals[i] || (i + 1) + '위';
-    html += '<div>';
-    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
-      '<span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
-      '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + m.kcal.toLocaleString() + ' kcal</span></div>';
-    html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
-      '<div style="height:100%;width:' + pct + '%;background:' + (i === 0 ? '#E0726A' : colorOf(m.name)) + ';border-radius:99px"></div></div>';
-    html += '</div>';
-  });
-  html += '</div></div>';
+  if (weekData.length > 0) {
+    const medals = ['🥇','🥈','🥉'];
+    const king = weekData[0];
+    html += '<div class="card" style="margin-top:0">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🍔 이번 주 먹방왕</div>';
+    html += '<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--bg);border-radius:14px;margin-bottom:16px">';
+    html += '<span style="font-size:32px">🍔</span>';
+    html += '<div style="flex:1">';
+    html += '<div style="font-size:17px;font-weight:800">' + esc(king.name) + ' 👑</div>';
+    html += '<div style="font-size:13px;color:var(--muted);margin-top:2px">이번 주 ' + king.kcal.toLocaleString() + ' kcal · ' + king.days + '일 기록</div>';
+    html += '</div></div>';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">이번 주 칼로리 순위</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px">';
+    weekData.forEach((m, i) => {
+      const pct = Math.round(m.kcal / weekData[0].kcal * 100);
+      const medal = medals[i] || (i + 1) + '위';
+      html += '<div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
+        '<span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>' +
+        '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + m.kcal.toLocaleString() + ' kcal</span></div>';
+      html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+        '<div style="height:100%;width:' + pct + '%;background:' + (i === 0 ? '#E0726A' : colorOf(m.name)) + ';border-radius:99px"></div></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  } else {
+    html += '<div class="card" style="margin-top:0"><div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🍔 이번 주 먹방왕</div><div style="text-align:center;padding:20px;color:var(--faint);font-size:13px">이번 주 기록이 없어요</div></div>';
+  }
 
     html += renderHealthCard();
   html += '</div>';
@@ -3732,7 +3738,7 @@ async function sendAIMessage() {
       const foods = mEntries.map(e => e.food + "(" + e.calories + "kcal)").join(", ") || "없음";
       // 이번 주 요약
       const wr = getWeekRange(new Date());
-      const weekEntries2 = entries.filter(e => e.member === view && e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end));
+      const weekEntries2 = entries.filter(e => e.member === view && new Date(e.timestamp) >= wr.start && new Date(e.timestamp) <= wr.end);
       const weekKcal = weekEntries2.reduce((s,e) => s + e.calories, 0);
       const weekDays = new Set(weekEntries2.map(e => e.date)).size;
       systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
@@ -3944,56 +3950,6 @@ async function submitEditNotice(id) {
 }
 
 // ── 투표 화면 ──
-function renderVoteHtml() {
-  const pollList = Object.values(polls);
-  let html = '<div class="list" style="padding-bottom:160px">';
-
-  if (view === "all") {
-    html += '<div style="margin-bottom:14px;padding:11px 14px;background:var(--accent-soft);border-radius:12px;font-size:13px;font-weight:700;color:var(--accent)">위에서 내 이름을 선택하면 투표할 수 있어요 👆</div>';
-  }
-
-  if (pollList.length === 0) {
-    html += '<div class="empty">아직 투표가 없어요.<br>아래 + 버튼으로 만들어보세요!</div>';
-  } else {
-    pollList.slice().reverse().forEach(poll => {
-      const totalVotes = Object.values(poll.options || {}).reduce((s, o) => s + (o.voters ? Object.keys(o.voters).length : 0), 0);
-      html += '<div class="card" style="margin:0 0 14px">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
-        '<div style="font-size:16px;font-weight:800">' + esc(poll.title) + '</div>' +
-        '<button onclick="deletePoll(\'' + poll.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>' +
-        '</div>';
-      html += '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">' + esc(poll.author) + ' · 총 ' + totalVotes + '표</div>';
-
-      Object.entries(poll.options || {}).forEach(([optId, opt]) => {
-        const voters = opt.voters ? Object.keys(opt.voters) : [];
-        const count = voters.length;
-        const pct = totalVotes ? Math.round(count / totalVotes * 100) : 0;
-        const myVote = view !== "all" && voters.includes(view);
-        html += '<div style="margin-bottom:12px">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">' +
-          '<span style="font-size:14px;font-weight:' + (myVote ? '800' : '600') + ';color:' + (myVote ? 'var(--accent)' : 'var(--ink)') + '">' +
-          (myVote ? '✓ ' : '') + esc(opt.text) + '</span>' +
-          '<span style="font-size:13px;font-weight:700;color:var(--muted)">' + count + '표 ' + pct + '%</span></div>';
-        html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden;margin-bottom:7px">' +
-          '<div style="height:100%;width:' + pct + '%;background:' + (myVote ? 'var(--accent)' : 'var(--faint)') + ';border-radius:99px"></div></div>';
-        if (view !== "all") {
-          html += '<button onclick="castVote(\'' + poll.id + '\',\'' + optId + '\')" ' +
-            'style="padding:7px 16px;border-radius:99px;border:1px solid ' +
-            (myVote ? 'var(--accent)' : 'var(--line)') + ';background:' + (myVote ? 'var(--accent-soft)' : 'transparent') +
-            ';color:' + (myVote ? 'var(--accent)' : 'var(--muted)') + ';font-size:13px;font-weight:700">' +
-            (myVote ? '✓ 취소' : '투표하기') + '</button>';
-        }
-        html += '</div>';
-      });
-
-      html += '<button onclick="openAddOption(\'' + poll.id + '\')" style="width:100%;margin-top:4px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:13px;font-weight:700">+ 선택지 추가</button>';
-      html += '</div>';
-    });
-  }
-
-  html += '</div>';
-  return html;
-}
 
 async function castVote(pollId, optId) {
   if (view === "all") { alert("멤버를 선택한 뒤 투표해주세요!"); return; }
