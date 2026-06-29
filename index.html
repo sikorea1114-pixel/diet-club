@@ -437,8 +437,7 @@ function render() {
   const hasNewCommunity = (hasNewNotice && !isNotice) || (hasNewPoll && !isVote);
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
-    const d = new Date(e.timestamp);
-    return d >= wr.start && d <= wr.end &&
+    return e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) &&
       (view === "all" || e.member === view);
   }).sort((a,b) => b.timestamp - a.timestamp);
 
@@ -487,14 +486,14 @@ function render() {
       '</div>';
   } else {
     html += '<div style="display:flex;gap:6px;padding:10px 22px 0">' +
-      '<button onclick="setMode(\'vote\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="vote"?"var(--ink)":"var(--line)") + ';background:' + (mode==="vote"?"var(--ink)":"transparent") + ';color:' + (mode==="vote"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">🗳️ 투표' +
-      (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
-      '</button>' +
       '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
       (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
-      '<button onclick="setMode(\'ai\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="ai"?"var(--ink)":"var(--line)") + ';background:' + (mode==="ai"?"var(--ink)":"transparent") + ';color:' + (mode==="ai"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🤖 AI</button>' +
       '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (isMukbang?"var(--ink)":"var(--line)") + ';background:' + (isMukbang?"var(--ink)":"transparent") + ';color:' + (isMukbang?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🏆 랭킹</button>' +
+      '<button onclick="setMode(\'vote\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="vote"?"var(--ink)":"var(--line)") + ';background:' + (mode==="vote"?"var(--ink)":"transparent") + ';color:' + (mode==="vote"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">🗳️ 투표' +
+      (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+      '</button>' +
+      '<button onclick="setMode(\'ai\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="ai"?"var(--ink)":"var(--line)") + ';background:' + (mode==="ai"?"var(--ink)":"transparent") + ';color:' + (mode==="ai"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🤖 AI</button>' +
       '</div>';
   }
 
@@ -3337,15 +3336,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
 function renderMukbangHtml() {
   const wr = getWeekRange(new Date());
   let html = '<div class="list" style="padding-bottom:100px">';
-  const weekData = members.map(m => {
-    const wEntries = entries.filter(e => {
-      const d = new Date(e.timestamp);
-      return d >= wr.start && d <= wr.end && e.member === m.name;
-    });
-    const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
-    const days = new Set(wEntries.map(e => e.date)).size;
-    return { name: m.name, kcal, days };
-  }).filter(m => m.kcal > 0).sort((a, b) => b.kcal - a.kcal);
+
   // 다이어트 점수 카드 (먹방왕 데이터 없어도 항상 표시)
   const scoreData = members.map(m => {
     const mEntries = entries.filter(e => e.member === m.name);
@@ -3358,7 +3349,7 @@ function renderMukbangHtml() {
     score += recordDays.length * 10;
     score += exDays.length * 5;
     score -= warningCount * 3;
-    score += thumbCount * 3; // 따봉 +3점
+    score += thumbCount * 3;
     recordDays.forEach(d => {
       const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
       if (dayKcal === 0) return;
@@ -3367,6 +3358,13 @@ function renderMukbangHtml() {
     });
     return { name: m.name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount };
   }).sort((a,b) => b.score - a.score);
+
+  const weekData = members.map(m => {
+    const wEntries = entries.filter(e => e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) && e.member === m.name);
+    const kcal = wEntries.reduce((s, e) => s + e.calories, 0);
+    const days = new Set(wEntries.map(e => e.date)).size;
+    return { name: m.name, kcal, days };
+  }).filter(m => m.kcal > 0).sort((a, b) => b.kcal - a.kcal);
 
   if (scoreData.some(m => m.recordDays > 0)) {
     const maxScore = Math.max(1, ...scoreData.map(m => m.score));
