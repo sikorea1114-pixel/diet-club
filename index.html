@@ -326,7 +326,7 @@ async function loadAll() {
     dbGet(seasonPath("polls")),
     dbGet(seasonPath("notices")),
     dbGet("seasons"),
-    dbGet(seasonPath("pledges/" + fmtKey(new Date()))),
+    dbGet(seasonPath("pledges")),
     currentSeasonId === "default" ? dbGet("meetDate") : dbGet("seasons/" + currentSeasonId + "/meetDate"),
     currentSeasonId === "default" ? dbGet("hall") : dbGet("seasons/" + currentSeasonId + "/hall"),
     dbGet(seasonPath("exercises")),
@@ -555,6 +555,20 @@ function render() {
       if (hall.record) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span style="font-size:14px;color:var(--muted);font-weight:700">📋 최다 기록</span>' +
         '<span style="font-size:15px;font-weight:800">' + esc(hall.record.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.record.days + '일</span></span></div>';
+      if (hall.goals && hall.goals.length > 0) {
+        html += '<div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">';
+        html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🎯 시즌 목표</div>';
+        hall.goals.forEach(g => {
+          const icon = g.result === "success" ? "✅" : g.result === "fail" ? "❌" : "➖";
+          const color = g.result === "success" ? "#4CAF50" : g.result === "fail" ? "#E0726A" : "var(--faint)";
+          html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0">' +
+            '<div><span style="font-size:13px;font-weight:700">' + esc(g.name) + '</span>' +
+            (g.goal ? '<span style="font-size:11px;color:var(--muted);margin-left:6px">"' + esc(g.goal) + '"</span>' : '') +
+            '</div>' +
+            '<span style="font-size:16px;color:' + color + '">' + icon + '</span></div>';
+        });
+        html += '</div>';
+      }
       html += '</div></div>';
     }
   }
@@ -2939,13 +2953,67 @@ async function saveMeetDate() {
   await loadAll(); render();
 }
 
-async function confirmEndSeason() {
-  if (!confirm("이 시즌을 종료할까요?\n명예의 전당에 결과가 저장돼요.")) return;
-  closeModal();
-  await endSeason();
+function confirmEndSeason() {
+  const m = document.getElementById("modal");
+  // 멤버별 시즌 목표 가져오기
+  const memberGoals = members.map(mb => ({
+    name: mb.name,
+    goal: pledges[mb.name] || ""
+  }));
+
+  let goalsHtml = memberGoals.map(mb =>
+    '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)">' +
+    '<div><div style="font-size:14px;font-weight:800">' + esc(mb.name) + '</div>' +
+    (mb.goal ? '<div style="font-size:12px;color:var(--muted);margin-top:2px">"' + esc(mb.goal) + '"</div>' : '<div style="font-size:12px;color:var(--faint);margin-top:2px">목표 없음</div>') +
+    '</div>' +
+    '<div style="display:flex;gap:6px">' +
+    '<button id="goal-' + esc(mb.name) + '-success" onclick="toggleGoalResult(\'' + esc(mb.name) + '\', \'success\')" style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;font-weight:700">✅ 성공</button>' +
+    '<button id="goal-' + esc(mb.name) + '-fail" onclick="toggleGoalResult(\'' + esc(mb.name) + '\', \'fail\')" style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--muted);font-size:12px;font-weight:700">❌ 실패</button>' +
+    '</div></div>'
+  ).join('');
+
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>시즌 종료</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:16px">시즌 목표 달성 여부를 선택하고 종료하세요.</div>' +
+    goalsHtml +
+    '<button class="save" style="margin-top:16px;background:#E0726A" onclick="submitEndSeason()">🏁 시즌 종료</button>' +
+    '</div></div>';
+  window._goalResults = {};
 }
 
-async function endSeason() {
+function toggleGoalResult(name, result) {
+  if (!window._goalResults) window._goalResults = {};
+  const current = window._goalResults[name];
+  if (current === result) {
+    // 토글 해제
+    delete window._goalResults[name];
+    document.getElementById("goal-" + name + "-success").style.background = "transparent";
+    document.getElementById("goal-" + name + "-success").style.color = "var(--muted)";
+    document.getElementById("goal-" + name + "-fail").style.background = "transparent";
+    document.getElementById("goal-" + name + "-fail").style.color = "var(--muted)";
+  } else {
+    window._goalResults[name] = result;
+    if (result === "success") {
+      document.getElementById("goal-" + name + "-success").style.background = "#4CAF50";
+      document.getElementById("goal-" + name + "-success").style.color = "#fff";
+      document.getElementById("goal-" + name + "-fail").style.background = "transparent";
+      document.getElementById("goal-" + name + "-fail").style.color = "var(--muted)";
+    } else {
+      document.getElementById("goal-" + name + "-fail").style.background = "#E0726A";
+      document.getElementById("goal-" + name + "-fail").style.color = "#fff";
+      document.getElementById("goal-" + name + "-success").style.background = "transparent";
+      document.getElementById("goal-" + name + "-success").style.color = "var(--muted)";
+    }
+  }
+}
+
+async function submitEndSeason() {
+  if (!confirm("시즌을 종료할까요? 되돌릴 수 없어요.")) return;
+  closeModal();
+  await endSeason(window._goalResults || {});
+}
+
+async function endSeason(goalResults = {}) {
   // 명예의 전당 계산
   const hall = {};
 
@@ -2969,6 +3037,14 @@ async function endSeason() {
     days: new Set(entries.filter(e => e.member === m.name).map(e => e.date)).size
   })).sort((a,b) => b.days - a.days);
   if (recordData.length && recordData[0].days > 0) hall.record = { name: recordData[0].name, days: recordData[0].days };
+
+  // 시즌 목표 성공/실패
+  const goalSummary = members.map(m => ({
+    name: m.name,
+    goal: pledges[m.name] || "",
+    result: goalResults[m.name] || "none"
+  }));
+  hall.goals = goalSummary;
 
   // Firebase에 저장
   if (currentSeasonId === "default") {
@@ -3254,7 +3330,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
   // 오늘의 다짐
   if (members.length > 0 && loaded) {
     html += '<div class="card" style="margin-top:0">';
-    html += '<div class="sub">💬 오늘의 다짐</div>';
+    html += '<div class="sub">🎯 이번 시즌 목표</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">';
     members.forEach(m => {
       const pledge = pledges[m.name];
@@ -3266,7 +3342,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
     html += '</div>';
     const myPledge = view !== "all" ? (pledges[view] || "") : "";
     html += '<div style="display:flex;gap:8px;margin-top:12px">' +
-      '<input class="ti" id="pledge-input" placeholder="' + (view === "all" ? "이름 선택 후 다짐 입력" : "오늘의 다짐 한 줄") + '" value="' + esc(myPledge) + '" ' + (view === "all" ? "disabled " : "") + 'style="flex:1;margin:0" />' +
+      '<input class="ti" id="pledge-input" placeholder="' + (view === "all" ? "이름 선택 후 목표 입력" : "이번 시즌 목표를 입력하세요") + '" value="' + esc(myPledge) + '" ' + (view === "all" ? "disabled " : "") + 'style="flex:1;margin:0" />' +
       '<button onclick="submitPledge()" ' + (view === "all" ? "disabled " : "") + 'style="padding:0 16px;border-radius:12px;border:none;background:' + (view === "all" ? "var(--faint)" : "var(--accent)") + ';color:#fff;font-size:13px;font-weight:800">저장</button>' +
       '</div>';
     html += '</div>';
@@ -3955,12 +4031,11 @@ async function submitNewNotice() {
 async function submitPledge() {
   if (view === "all") { alert("이름을 먼저 선택해주세요!"); return; }
   const text = document.getElementById("pledge-input").value.trim();
-  const todayKey = fmtKey(new Date());
   pledges[view] = text;
   if (text) {
-    await dbPut(seasonPath("pledges/" + todayKey + "/" + view), text);
+    await dbPut(seasonPath("pledges/" + view), text);
   } else {
-    await dbDelete(seasonPath("pledges/" + todayKey + "/" + view));
+    await dbDelete(seasonPath("pledges/" + view));
   }
   await loadAll(); render();
 }
@@ -4137,7 +4212,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
 
 start();
 </script>
