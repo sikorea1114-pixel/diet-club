@@ -44,7 +44,7 @@
 
   /* 카드 */
   .card {
-    margin: 8px 16px; background: var(--surface); border-radius: 16px; padding: 20px 20px;
+    margin: 10px 16px; background: var(--surface); border-radius: 16px; padding: 20px 20px;
     box-shadow: 0 1px 3px rgba(0,0,0,.06);
   }
   .card .sub { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
@@ -78,8 +78,8 @@
   .ghead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; padding: 0 2px; }
   .ghead b { font-size: 14px; font-weight: 800; letter-spacing: -0.01em; }
   .ghead span { font-size: 13px; font-weight: 700; color: var(--muted); }
-  .col { display: flex; flex-direction: column; gap: 8px; }
-  .col.tight { gap: 6px; }
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .col.tight { gap: 8px; }
   .entry {
     background: var(--surface); border-radius: 12px; padding: 14px 16px;
     display: flex; align-items: center; gap: 12px; animation: pop .25s ease;
@@ -112,7 +112,7 @@
     padding: 4px 0; transition: color .15s;
   }
   .bottom-nav button.on { color: var(--accent); }
-  .bottom-nav button .bnav-icon { font-size: 22px; line-height: 1; }
+  .bottom-nav button .bnav-icon { font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; }
 
   .wrap { max-width: 480px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
@@ -120,8 +120,8 @@
   .fab {
     position: fixed; bottom: calc(70px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     background: var(--accent); color: #fff; border: none; border-radius: 99px;
-    padding: 14px 24px; font-size: 15px; font-weight: 800; display: flex; align-items: center;
-    gap: 8px; box-shadow: 0 4px 16px rgba(49,130,246,.4); letter-spacing: -0.01em; z-index: 40;
+    padding: 11px 20px; font-size: 14px; font-weight: 800; display: flex; align-items: center;
+    gap: 6px; box-shadow: 0 4px 16px rgba(49,130,246,.35); letter-spacing: -0.01em; z-index: 40;
   }
 
   /* 모달 */
@@ -486,13 +486,16 @@ function render() {
   html += '</div>';
 
   // 하단 탭바
+  const svgHome = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+  const svgRecord = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>';
+  const svgChat = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
   html += '<div class="bottom-nav">' +
     '<button class="' + (isHome?"on":"") + '" onclick="setMode(\'home\')">' +
-    '<span class="bnav-icon">🏠</span>홈</button>' +
+    '<span class="bnav-icon">' + svgHome + '</span>홈</button>' +
     '<button class="' + (isRecord?"on":"") + '" onclick="setMode(\'day\')">' +
-    '<span class="bnav-icon">📋</span>기록</button>' +
+    '<span class="bnav-icon">' + svgRecord + '</span>기록</button>' +
     '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">' +
-    '<span class="bnav-icon">💬</span>커뮤니티' +
+    '<span class="bnav-icon">' + svgChat + '</span>커뮤니티' +
     (hasNewCommunity ? '<span style="position:absolute;top:4px;left:50%;transform:translateX(4px);width:7px;height:7px;background:#E0726A;border-radius:99px"></span>' : '') +
     '</button></div>';
 
