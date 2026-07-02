@@ -23,7 +23,7 @@
   .wrap { max-width: 480px; margin: 0 auto; padding-bottom: 220px; }
 
   /* 헤더 */
-  header { padding: 20px 20px 6px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
+  header { padding: 20px 20px 6px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .toprow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); }
   .brand span { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
@@ -98,9 +98,28 @@
   .entry .kc small { font-size: 11px; color: var(--muted); font-weight: 700; }
   .entry .del { border: none; background: transparent; padding: 4px; flex-shrink: 0; display: flex; }
 
+  /* 하단 탭바 */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+    background: var(--surface); border-top: 1px solid var(--line);
+    display: flex; justify-content: space-around; align-items: center;
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    max-width: 480px; margin: 0 auto; left: 50%; transform: translateX(-50%);
+    width: 100%;
+  }
+  .bottom-nav button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    border: none; background: transparent; color: var(--muted); font-size: 10px; font-weight: 700;
+    padding: 4px 0; transition: color .15s;
+  }
+  .bottom-nav button.on { color: var(--accent); }
+  .bottom-nav button .bnav-icon { font-size: 22px; line-height: 1; }
+
+  .wrap { max-width: 480px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); padding-top: 0; }
+
   /* 플로팅 버튼 */
   .fab {
-    position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: calc(70px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     background: var(--accent); color: #fff; border: none; border-radius: 99px;
     padding: 14px 24px; font-size: 15px; font-weight: 800; display: flex; align-items: center;
     gap: 8px; box-shadow: 0 4px 16px rgba(49,130,246,.4); letter-spacing: -0.01em; z-index: 40;
@@ -465,13 +484,18 @@ function render() {
     esc(currentSeasonName) +
     (!isCurrentSeason ? ' <span style="color:#E0726A;font-size:10px">종료</span>' : '') +
     ' ▾</button>';
-  html += '<div class="toggle">' +
-    '<button class="' + (isHome?"on":"") + '" onclick="setMode(\'home\')">🏠 홈</button>' +
-    '<button class="' + (isRecord?"on":"") + '" onclick="setMode(\'day\')">📋 기록</button>' +
-    '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">💬 커뮤니티' +
-    (hasNewCommunity ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
-    '</button></div>'; ;
   html += '</div>';
+
+  // 하단 탭바
+  html += '<div class="bottom-nav">' +
+    '<button class="' + (isHome?"on":"") + '" onclick="setMode(\'home\')">' +
+    '<span class="bnav-icon">🏠</span>홈</button>' +
+    '<button class="' + (isRecord?"on":"") + '" onclick="setMode(\'day\')">' +
+    '<span class="bnav-icon">📋</span>기록</button>' +
+    '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">' +
+    '<span class="bnav-icon">💬</span>커뮤니티' +
+    (hasNewCommunity ? '<span style="position:absolute;top:4px;left:50%;transform:translateX(4px);width:7px;height:7px;background:#E0726A;border-radius:99px"></span>' : '') +
+    '</button></div>';
 
   // 서브 토글
   if (isRecord) {
