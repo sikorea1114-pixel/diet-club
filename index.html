@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title> 🏃🏻🏃‍♀️</title>
 <style>
   :root {
@@ -102,7 +102,7 @@
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
     background: var(--surface); border-top: 1px solid var(--line);
     display: flex; justify-content: space-around; align-items: center;
-    padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+    padding: 8px 0 calc(16px + env(safe-area-inset-bottom));
     max-width: 480px; margin: 0 auto; left: 50%; transform: translateX(-50%);
     width: 100%;
   }
@@ -114,14 +114,14 @@
   .bottom-nav button.on { color: var(--accent); }
   .bottom-nav button .bnav-icon { font-size: 22px; line-height: 1; display: flex; align-items: center; justify-content: center; }
 
-  .wrap { max-width: 480px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .wrap { max-width: 480px; margin: 0 auto; padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
 
   /* 플로팅 버튼 */
   .fab {
-    position: fixed; bottom: calc(70px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
     background: var(--accent); color: #fff; border: none; border-radius: 99px;
-    padding: 11px 20px; font-size: 14px; font-weight: 800; display: flex; align-items: center;
-    gap: 6px; box-shadow: 0 4px 16px rgba(49,130,246,.35); letter-spacing: -0.01em; z-index: 40;
+    padding: 14px 24px; font-size: 15px; font-weight: 800; display: flex; align-items: center;
+    gap: 8px; box-shadow: 0 4px 16px rgba(49,130,246,.4); letter-spacing: -0.01em; z-index: 40;
   }
 
   /* 모달 */
@@ -723,7 +723,7 @@ function render() {
   } else if (isNotice) {
     html += renderNoticeHtml();
   } else if (isMukbang) {
-    const rankSubTab = '<div style="display:flex;gap:6px;padding:8px 22px 0">' +
+    const rankSubTab = '<div style="display:flex;gap:6px;padding:8px 16px 12px">' +
       '<button onclick="setMode(\'mukbang\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid ' + (mode==="mukbang"?"var(--ink)":"var(--line)") + ';background:' + (mode==="mukbang"?"var(--ink)":"transparent") + ';color:' + (mode==="mukbang"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">이번 주</button>' +
       '<button onclick="setMode(\'history\')" style="flex:1;padding:7px;border-radius:10px;border:1px solid ' + (mode==="history"?"var(--ink)":"var(--line)") + ';background:' + (mode==="history"?"var(--ink)":"transparent") + ';color:' + (mode==="history"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">역대 기록</button>' +
       '</div>';
@@ -740,10 +740,10 @@ function render() {
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:calc(62px + env(safe-area-inset-bottom) + 52px)">' + iconPlus(20) + ' 먹은 거 적기</button>';
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openExercise()" style="bottom:calc(62px + env(safe-area-inset-bottom))">' + iconPlus(20) + ' 운동 기록하기</button>';
-  if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()" style="bottom:calc(62px + env(safe-area-inset-bottom))">' + iconPlus(20) + ' 투표 만들기</button>';
-  if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()" style="bottom:calc(62px + env(safe-area-inset-bottom))">' + iconPlus(20) + ' 글 쓰기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" style="bottom:calc(136px + env(safe-area-inset-bottom))" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
+  if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
+  if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
   if (isReadOnly) html += '<div style="position:fixed;bottom:calc(62px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
 
   app.innerHTML = html;
