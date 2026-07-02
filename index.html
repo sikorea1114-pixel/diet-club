@@ -20,10 +20,9 @@
   input { font-family: inherit; }
   .noscroll::-webkit-scrollbar { display: none; }
   .noscroll { -ms-overflow-style: none; scrollbar-width: none; }
-  .wrap { max-width: 480px; margin: 0 auto; padding-bottom: 220px; }
 
   /* 헤더 */
-  header { padding: 20px 20px 6px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  header { padding: 16px 20px 12px; background: var(--surface); border-bottom: 1px solid var(--line); }
   .toprow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .brand { display: flex; align-items: center; gap: 8px; color: var(--ink); }
   .brand span { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
@@ -35,7 +34,7 @@
     transition: all .15s ease; white-space: nowrap;
   }
   .toggle button.on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
-  .nav { display: flex; align-items: center; justify-content: space-between; }
+  .nav { display: flex; align-items: center; justify-content: space-between; padding-bottom: 8px; }
   .nav .icon { border: none; background: transparent; padding: 4px; display: flex; }
   .nav .label {
     border: none; background: transparent; display: flex; align-items: center; gap: 7px;
@@ -45,7 +44,7 @@
 
   /* 카드 */
   .card {
-    margin: 8px 16px 4px; background: var(--surface); border-radius: 16px; padding: 20px 20px;
+    margin: 8px 16px; background: var(--surface); border-radius: 16px; padding: 20px 20px;
     box-shadow: 0 1px 3px rgba(0,0,0,.06);
   }
   .card .sub { font-size: 13px; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
@@ -61,7 +60,7 @@
   .bar .kc { width: 56px; text-align: right; font-size: 13px; font-weight: 700; }
 
   /* 칩 */
-  .chips { display: flex; gap: 8px; padding: 14px 16px 6px; flex-wrap: wrap; }
+  .chips { display: flex; gap: 8px; padding: 8px 16px 6px; flex-wrap: wrap; }
   .chip {
     flex-shrink: 0; display: flex; align-items: center; gap: 6px; padding: 7px 14px;
     border-radius: 99px; border: 1.5px solid var(--line); background: var(--surface);
@@ -72,7 +71,7 @@
   .chip.add { border: 1.5px dashed var(--faint); background: transparent; color: var(--muted); font-weight: 600; }
 
   /* 리스트 */
-  .list { padding: 10px 16px 0; }
+  .list { padding: 0 16px 0; }
   .empty { text-align: center; color: var(--muted); font-size: 14px; line-height: 1.7; padding: 48px 20px; font-weight: 500; }
   .empty .link { border: none; background: transparent; color: var(--accent); font-weight: 700; font-size: 15px; margin-top: 12px; }
   .group { margin-bottom: 20px; }
@@ -115,7 +114,7 @@
   .bottom-nav button.on { color: var(--accent); }
   .bottom-nav button .bnav-icon { font-size: 22px; line-height: 1; }
 
-  .wrap { max-width: 480px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); padding-top: 0; }
+  .wrap { max-width: 480px; margin: 0 auto; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
   /* 플로팅 버튼 */
   .fab {
@@ -499,13 +498,13 @@ function render() {
 
   // 서브 토글
   if (isRecord) {
-    html += '<div style="display:flex;gap:6px;padding:10px 22px 0">' +
-      '<button onclick="setMode(\'day\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="day"?"var(--ink)":"var(--line)") + ';background:' + (mode==="day"?"var(--ink)":"transparent") + ';color:' + (mode==="day"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">일별</button>' +
-      '<button onclick="setMode(\'week\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="week"?"var(--ink)":"var(--line)") + ';background:' + (mode==="week"?"var(--ink)":"transparent") + ';color:' + (mode==="week"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">주간</button>' +
-      '<button onclick="setMode(\'month\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="month"?"var(--ink)":"var(--line)") + ';background:' + (mode==="month"?"var(--ink)":"transparent") + ';color:' + (mode==="month"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">월별</button>' +
+    html += '<div style="display:flex;gap:6px;padding:12px 16px 0">' +
+      '<button onclick="setMode(\'day\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="day"?"var(--accent)":"var(--line)") + ';background:' + (mode==="day"?"var(--accent-soft)":"transparent") + ';color:' + (mode==="day"?"var(--accent)":"var(--muted)") + ';font-size:13px;font-weight:700">일별</button>' +
+      '<button onclick="setMode(\'week\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="week"?"var(--accent)":"var(--line)") + ';background:' + (mode==="week"?"var(--accent-soft)":"transparent") + ';color:' + (mode==="week"?"var(--accent)":"var(--muted)") + ';font-size:13px;font-weight:700">주간</button>' +
+      '<button onclick="setMode(\'month\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="month"?"var(--accent)":"var(--line)") + ';background:' + (mode==="month"?"var(--accent-soft)":"transparent") + ';color:' + (mode==="month"?"var(--accent)":"var(--muted)") + ';font-size:13px;font-weight:700">월별</button>' +
       '</div>';
   } else {
-    html += '<div style="display:flex;gap:6px;padding:10px 22px 0">' +
+    html += '<div style="display:flex;gap:6px;padding:12px 16px 0">' +
       '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
       (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
@@ -534,7 +533,7 @@ function render() {
   if (!isVote && !isNotice && !isMukbang && !isAI && !isHome) {
 
     // 합계 카드
-    html += '<div class="card" style="margin-top:0">';
+    html += '<div class="card" style="margin-top:12px">';
     html += '<div class="sub" onclick="toggleWeekDay(\'summary-card\')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center">' +
       (isMonth ? (view==="all" ? "이번 달 모임 전체" : "이번 달 " + esc(view) + " 님") : isWeek ? (view==="all" ? "이번 주 모임 전체" : esc(view) + " 님") : (view==="all" ? "모임 전체 섭취량" : esc(view) + " 님 섭취량")) +
       '<span id="summary-card-arrow" style="font-size:12px;color:var(--muted)">' + (cardCollapsed.summary ? '▼' : '▲') + '</span></div>';
@@ -738,11 +737,11 @@ function render() {
   html += '</div>';
 
   // 플로팅 버튼
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:170px">' + iconPlus(20) + ' 먹은 거 적기</button>';
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
-  if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
-  if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
-  if (isReadOnly) html += '<div style="position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openAdd()" style="bottom:calc(62px + env(safe-area-inset-bottom) + 52px)">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly) html += '<button class="fab" onclick="openExercise()" style="bottom:calc(62px + env(safe-area-inset-bottom))">' + iconPlus(20) + ' 운동 기록하기</button>';
+  if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()" style="bottom:calc(62px + env(safe-area-inset-bottom))">' + iconPlus(20) + ' 투표 만들기</button>';
+  if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()" style="bottom:calc(62px + env(safe-area-inset-bottom))">' + iconPlus(20) + ' 글 쓰기</button>';
+  if (isReadOnly) html += '<div style="position:fixed;bottom:calc(62px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
 
   app.innerHTML = html;
   requestAnimationFrame(() => {
@@ -3211,7 +3210,7 @@ async function forceResaveLastWeek() {
 }
 function renderWeeklyHistoryHtml() {
   const records = Object.values(weeklyRecords).sort((a,b) => b.weekKey.localeCompare(a.weekKey));
-  let html = '<div class="list" style="padding-bottom:100px">';
+  let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
   if (records.length === 0) {
     html += '<div class="empty">아직 지난 주 기록이 없어요.<br>다음 주 월요일에 자동 저장돼요!</div>';
     if (view === "이성호") html += '<div style="text-align:center;margin-top:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:10px 20px;border-radius:12px">🔄 지난 주 기록 저장</button></div>';
@@ -3291,7 +3290,7 @@ function renderWeeklyHistoryHtml() {
 }
 // ── 홈 화면 ──
 function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
-  let html = '<div style="padding-bottom:100px">';
+  let html = '<div style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
   // D-day 카드
   if (meetDate) {
@@ -3431,7 +3430,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
 
 function renderMukbangHtml() {
   const wr = getWeekRange(new Date());
-  let html = '<div class="list" style="padding-bottom:100px">';
+  let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
   // 다이어트 점수 카드 (먹방왕 데이터 없어도 항상 표시)
   const scoreData = members.map(m => {
@@ -3787,7 +3786,7 @@ function saveGeminiKey(k) {
 
 function renderAIHtml() {
   const key = getGeminiKey();
-  let html = '<div class="list" style="padding-bottom:180px">';
+  let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
   if (!loaded) {
     html += '<div class="empty">불러오는 중…</div></div>';
     return html;
@@ -3934,7 +3933,7 @@ async function sendAIMessage() {
 // ── 투표 화면 ──
 function renderVoteHtml() {
   const pollList = Object.values(polls);
-  let html = '<div class="list" style="padding-bottom:160px">';
+  let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
   if (view === "all") {
     html += '<div style="margin-bottom:14px;padding:11px 14px;background:var(--accent-soft);border-radius:12px;font-size:13px;font-weight:700;color:var(--accent)">위에서 내 이름을 선택하면 투표할 수 있어요 👆</div>';
@@ -3986,7 +3985,7 @@ function renderVoteHtml() {
 // ── 공지 화면 ──
 function renderNoticeHtml() {
   const noticeList = Object.values(notices).sort((a,b) => b.createdAt - a.createdAt);
-  let html = '<div class="list" style="padding-bottom:160px">';
+  let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
   if (noticeList.length === 0) {
     html += '<div class="empty">아직 글이 없어요.<br>아래 + 버튼으로 첫 글을 써보세요!</div>';
