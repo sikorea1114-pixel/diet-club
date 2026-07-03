@@ -4197,13 +4197,13 @@ function streakEmoji(n) {
   return '🔥';
 }
 function calcStreak(memberName) {
+  // timestamp 기준 - 실제 기록한 날짜로만 계산 (소급 입력 불가)
   const dates = [...new Set(
-    entries.filter(e => e.member === memberName).map(e => e.date)
+    entries.filter(e => e.member === memberName).map(e => fmtKey(new Date(e.timestamp)))
   )].sort().reverse();
   if (!dates.length) return 0;
   const today = fmtKey(new Date());
   const yesterday = fmtKey(new Date(Date.now() - 86400000));
-  // 오늘 또는 어제 기록이 없으면 스트릭 0
   if (dates[0] !== today && dates[0] !== yesterday) return 0;
   let streak = 1;
   for (let i = 1; i < dates.length; i++) {
