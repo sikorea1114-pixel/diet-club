@@ -804,7 +804,10 @@ function openAdd() {
     '<div style="display:flex;align-items:center;gap:8px">' +
     '<input class="ti num" id="f-kcal" inputmode="numeric" placeholder="모르면 비워두세요" style="flex:1" />' +
     '<span style="font-size:15px;font-weight:700;color:var(--muted)">kcal</span></div>' +
-    '<button id="ai-btn" onclick="estimateCalories()" style="width:100%;margin-top:10px;padding:13px 16px;border-radius:14px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;">✨ 칼로리 추정하기</button>' +
+    '<div style="display:flex;gap:8px;margin-top:10px">' +
+    '<button id="ai-btn" onclick="estimateCalories()" style="flex:1;padding:13px 16px;border-radius:14px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;">✨ 텍스트 추정</button>' +
+    '<label style="flex:1;padding:13px 16px;border-radius:14px;border:1px dashed #4CAF50;background:#f0faf0;color:#4CAF50;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer">📷 사진 추정<input type="file" accept="image/*" capture="environment" id="photo-input" style="display:none" onchange="estimateFromPhoto(this)"></label>' +
+    '</div>' +
     '<div id="ai-result" style="display:none;margin-top:10px;padding:13px 16px;border-radius:14px;background:var(--bg);border:1px solid var(--line);font-size:13px;color:var(--muted);line-height:1.6;"></div>' +
     '<button class="save" id="f-save" onclick="submitAdd()">' + iconCheck() + ' 기록 저장</button>' +
     '</div></div>';
@@ -2544,9 +2547,78 @@ function estimateCalories() {
   btn.innerHTML = '✨ 칼로리 추정하기';
 }
 
+async function estimateFromPhoto(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const key = getGeminiKey();
+  if (!key) { alert("Gemini API 키가 없어요!"); return; }
+
+  const resultDiv = document.getElementById("ai-result");
+  resultDiv.style.display = "block";
+  resultDiv.innerHTML = "📷 사진 분석 중...";
+
+  // base64 변환
+  const base64 = await new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result.split(",")[1]);
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+
+  try {
+    const resp = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + key,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { inline_data: { mime_type: file.type, data: base64 } },
+              { text: "이 음식 사진을 분석해서 음식명과 칼로리를 추정해줘. 반드시 JSON 형식으로만 답해. 예시: {\"foods\": [{\"name\": \"김치찌개\", \"kcal\": 350}, {\"name\": \"밥\", \"kcal\": 300}], \"total\": 650} 음식이 없으면 {\"foods\": [], \"total\": 0}" }
+            ]
+          }],
+          generationConfig: { temperature: 0.1 }
+        })
+      }
+    );
+    const data = await resp.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const parsed = JSON.parse(clean);
+
+    if (!parsed.foods || parsed.foods.length === 0) {
+      resultDiv.innerHTML = "음식을 인식하지 못했어요. 다른 사진을 시도해보세요.";
+      return;
+    }
+
+    let html = "<b>🍽️ 분석 결과</b><br>";
+    parsed.foods.forEach(f => {
+      html += "• " + f.name + " <b>" + f.kcal + "kcal</b><br>";
+    });
+    html += "<br><b>합계: " + parsed.total + "kcal</b>";
+    html += '<br><button onclick="applyPhotoEstimate(' + parsed.total + ', \'' + esc(parsed.foods.map(f=>f.name).join(", ")) + '\')" style="margin-top:8px;width:100%;padding:10px;border-radius:12px;border:none;background:#4CAF50;color:#fff;font-size:14px;font-weight:800;">이 값으로 입력하기</button>';
+    resultDiv.innerHTML = html;
+
+  } catch(e) {
+    resultDiv.innerHTML = "분석 실패: " + e.message;
+  }
+}
+
+function applyPhotoEstimate(kcal, foodName) {
+  const foodInput = document.getElementById("f-food");
+  const kcalInput = document.getElementById("f-kcal");
+  if (foodInput && !foodInput.value.trim()) foodInput.value = foodName;
+  if (kcalInput) kcalInput.value = kcal;
+  document.getElementById("f-save").disabled = false;
+  document.getElementById("ai-result").style.display = "none";
+}
+
 function applyEstimate(kcal) {
-  const inp = document.getElementById("f-kcal");
-  if (inp) inp.value = kcal;
+  const kcalInput = document.getElementById("f-kcal");
+  if (kcalInput) kcalInput.value = kcal;
+  document.getElementById("f-save").disabled = false;
+  document.getElementById("ai-result").style.display = "none";
 }
 
 function toggleWeekDay(uid) {
@@ -4240,7 +4312,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
 
 start();
 </script>
