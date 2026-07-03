@@ -768,7 +768,7 @@ function entryCard(e) {
   const c = colorOf(e.member);
   return '<div class="entry" onclick="toggleEntry(this)">' +
     '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(avatarOf(e.member)) + '</span>' +
-    '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + fmtTime(e.timestamp) + '</div></div>' +
+    '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + (fmtKey(new Date(e.timestamp)) !== e.date ? '<span style="color:#E0726A">당일 기록 아님</span> · ' : '') + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum">' + e.calories.toLocaleString() + '<small> kcal</small></span>' +
     '<button class="del" onclick="event.stopPropagation();openEditEntry(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
     '<button class="del" onclick="event.stopPropagation();removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
@@ -3330,11 +3330,17 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
         const todayKcal = dayEntries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
         const todayBurned = dayExercises.filter(e => e.member === m.name).reduce((s,e) => s + e.burned, 0);
         const netKcal = todayKcal - todayBurned;
+        // 소급 입력 감지 - timestamp 날짜와 date가 다른 것들
+        const todayStr = fmtKey(new Date());
+        const backdatedDates = [...new Set(
+          entries.filter(e => e.member === m.name && fmtKey(new Date(e.timestamp)) === todayStr && e.date !== todayStr).map(e => e.date.slice(5).replace('-','/'))
+        )];
         html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
           '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
           '<div style="text-align:right"><span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
           (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' 운동 → 순 ' + netKcal.toLocaleString() + ' kcal</span>' : '') +
-          '</div></div>';
+          '</div></div>' +
+          (backdatedDates.length > 0 ? '<div style="font-size:11px;color:#E0726A;font-weight:700;margin-top:2px">📅 ' + backdatedDates.join(', ') + ' 기록을 오늘 입력</div>' : '');
       } else {
         let missDay = 1;
         const d = new Date(); d.setDate(d.getDate() - 1);
