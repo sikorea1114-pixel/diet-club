@@ -806,7 +806,7 @@ function openAdd() {
     '<span style="font-size:15px;font-weight:700;color:var(--muted)">kcal</span></div>' +
     '<div style="display:flex;gap:8px;margin-top:10px">' +
     '<button id="ai-btn" onclick="estimateCalories()" style="flex:1;padding:13px 16px;border-radius:14px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;">✨ 텍스트 추정</button>' +
-    '<label style="flex:1;padding:13px 16px;border-radius:14px;border:1px dashed #4CAF50;background:#f0faf0;color:#4CAF50;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer">📷 사진 추정<input type="file" accept="image/*" capture="environment" id="photo-input" style="display:none" onchange="estimateFromPhoto(this)"></label>' +
+    '<label style="flex:1;padding:13px 16px;border-radius:14px;border:1px dashed #4CAF50;background:#f0faf0;color:#4CAF50;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:7px;cursor:pointer">📷 사진 추정<input type="file" accept="image/*" id="photo-input" style="display:none" onchange="estimateFromPhoto(this)"></label>' +
     '</div>' +
     '<div id="ai-result" style="display:none;margin-top:10px;padding:13px 16px;border-radius:14px;background:var(--bg);border:1px solid var(--line);font-size:13px;color:var(--muted);line-height:1.6;"></div>' +
     '<button class="save" id="f-save" onclick="submitAdd()">' + iconCheck() + ' 기록 저장</button>' +
