@@ -3111,11 +3111,13 @@ function openBadgeCollection() {
     }
   }
 
-  // 시즌 타이틀 (영구 보관) → 이름 명확히 "지난 시즌 타이틀"로 변경
+  // 시즌 타이틀 (영구 보관)
   if (targetName) {
     const titles = lifetimeTitles[targetName] || [];
-    if (titles.length > 0) {
-      html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🏆 지난 시즌 타이틀</div>';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🏆 지난 시즌 타이틀</div>';
+    if (titles.length === 0) {
+      html += '<div style="font-size:12px;color:var(--faint);margin-bottom:20px">아직 없어요. 시즌이 끝나면 1등 부문이 여기에 영구 기록돼요.</div>';
+    } else {
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">';
       titles.slice().reverse().forEach(t => {
         html += '<span style="border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700">' + t.emoji + ' ' + esc(t.label) + '</span>';
