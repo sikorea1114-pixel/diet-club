@@ -3901,6 +3901,13 @@ function renderWeeklyHistoryHtml() {
   return html;
 }
 // ── 홈 화면 ──
+// 대표 배지 인라인 태그 (이름 옆에 붙이는 용도)
+function repBadgeTag(name) {
+  const rep = representativeBadges[name];
+  if (rep && isRepBadgeValid(name, rep)) return '<span style="font-size:12px" title="' + esc(rep.name) + '">' + rep.emoji + '</span> ';
+  return '';
+}
+
 function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
   let html = '<div style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
@@ -3961,7 +3968,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
           entries.filter(e => e.member === m.name && fmtKey(new Date(e.timestamp)) === todayStr && e.date !== todayStr).map(e => e.date.slice(5).replace('-','/'))
         )];
         html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-size:14px;font-weight:700">✅ ' + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
+          '<span style="font-size:14px;font-weight:700">✅ ' + repBadgeTag(m.name) + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
           '<div style="text-align:right"><span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
           (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' 운동 → 순 ' + netKcal.toLocaleString() + ' kcal</span>' : '') +
           '</div></div>' +
@@ -3973,7 +3980,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
         const emoji2 = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
         const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
         html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + esc(m.name) + '</span>' +
+          '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + repBadgeTag(m.name) + esc(m.name) + '</span>' +
           '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span></div>';
       }
     });
@@ -3988,7 +3995,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
     members.forEach(m => {
       const pledge = pledges[m.name];
       html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
-      html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + esc(m.name) + '</span>';
+      html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + repBadgeTag(m.name) + esc(m.name) + '</span>';
       html += pledge ? '<span style="font-size:13px;color:var(--ink);flex:1;text-align:right">&quot;' + esc(pledge) + '&quot;</span>' : '<span style="font-size:12px;color:var(--faint);flex:1;text-align:right">아직 없음</span>';
       html += '</div>';
     });
@@ -4010,7 +4017,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
       html += '<div style="display:flex;flex-direction:column;gap:8px">';
       streaks.sort((a,b) => b.streak - a.streak).forEach(s => {
         html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-size:14px;font-weight:700">' + esc(s.name) + '</span>' +
+          '<span style="font-size:14px;font-weight:700">' + repBadgeTag(s.name) + esc(s.name) + '</span>' +
           '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + streakEmoji(s.streak) + ' ' + s.streak + '일 연속</span>' +
           '</div>';
       });
@@ -4046,12 +4053,12 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
       html += '<div class="sub" style="margin-bottom:10px">🏆 이번 주 MVP</div>';
       html += '<div style="display:flex;align-items:center;gap:12px">';
       html += '<span style="width:42px;height:42px;border-radius:12px;background:' + mc + '22;color:' + mc + ';display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
-      html += '<div><div style="font-size:16px;font-weight:800">' + esc(mvp.name) + ' 👑</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록</div></div>';
+      html += '<div><div style="font-size:16px;font-weight:800">' + repBadgeTag(mvp.name) + esc(mvp.name) + ' 👑</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록</div></div>';
       html += '</div>';
       if (mvpData.length > 1) {
         html += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">';
         mvpData.slice(1).forEach((m,i) => {
-          html += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted)">' + (i+2) + '위 ' + esc(m.name) + '</span><span style="color:var(--muted);font-weight:700">' + m.score + '점</span></div>';
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted)">' + (i+2) + '위 ' + repBadgeTag(m.name) + esc(m.name) + '</span><span style="color:var(--muted);font-weight:700">' + m.score + '점</span></div>';
         });
         html += '</div>';
       }
