@@ -236,6 +236,7 @@ let lifetimeStats = {}; // 멤버별 평생 누적 통계 (시즌 무관)
 let firstAchievers = {}; // 모임 최초 달성자 (히든 배지)
 let representativeBadges = {}; // 멤버별 대표 배지
 let lifetimeTitles = {}; // 멤버별 시즌 타이틀 (평생 보관, 시즌 종료 시 부여)
+let badgeLog = {}; // 날짜별 배지 획득 로그 (홈 탭 표시용)
 let warnings = {}; // 멤버별 경고
 let thumbs = {}; // 멤버별 따봉
 let cardCollapsed = { streak: true, mvp: true, summary: true };
@@ -338,7 +339,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -356,7 +357,8 @@ async function loadAll() {
     dbGet("lifetimeStats"),
     dbGet("firstAchievers"),
     dbGet("representativeBadges"),
-    dbGet("lifetimeTitles")
+    dbGet("lifetimeTitles"),
+    dbGet("badgeLog/" + fmtKey(new Date()))
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -378,6 +380,7 @@ async function loadAll() {
   firstAchievers = fa || {};
   representativeBadges = rb || {};
   lifetimeTitles = lt || {};
+  badgeLog[fmtKey(new Date())] = bl || [];
   loaded = true;
 }
 
@@ -2830,9 +2833,30 @@ function getHiddenBadgeCatalog() {
 async function bumpLifetimeStat(name, field, delta) {
   if (!name) return;
   if (!lifetimeStats[name]) lifetimeStats[name] = { totalEntries: 0, totalExercises: 0, bestStreak: 0, seasonsCount: 0 };
+  const beforeAchieved = getLifetimeBadgeCatalog(name).filter(b => b.achieved).map(b => b.name);
   lifetimeStats[name][field] = Math.max(0, (lifetimeStats[name][field] || 0) + delta);
   await dbPut("lifetimeStats/" + encodeURIComponent(name) + "/" + field, lifetimeStats[name][field]);
+  if (delta > 0) {
+    const afterCatalog = getLifetimeBadgeCatalog(name);
+    const newlyAchieved = afterCatalog.filter(b => b.achieved && !beforeAchieved.includes(b.name));
+    for (const b of newlyAchieved) {
+      await logBadgeAchievement(name, b.emoji, b.name);
+    }
+  }
   await checkFirstAchievers(name);
+}
+
+// 오늘 획득한 배지 로그 (홈 탭 표시용) + 축하 팝업
+async function logBadgeAchievement(name, emoji, badgeName, isHidden) {
+  const todayKey = fmtKey(new Date());
+  if (!badgeLog[todayKey]) badgeLog[todayKey] = [];
+  const already = badgeLog[todayKey].some(b => b.name === name && b.badgeName === badgeName);
+  if (!already) {
+    badgeLog[todayKey].push({ name, emoji, badgeName, ts: Date.now() });
+    await dbPut("badgeLog/" + todayKey, badgeLog[todayKey]);
+  }
+  render();
+  showBadgeCelebration(name, emoji, badgeName, !!isHidden);
 }
 
 // 역대 최고 스트릭 갱신 (기록/운동 화면 진입 시 기회 볼 때마다 체크)
@@ -2852,27 +2876,28 @@ async function checkFirstAchievers(name) {
   let changed = false;
   if (!firstAchievers.record100 && (s.totalEntries || 0) >= 100) {
     firstAchievers.record100 = name; changed = true;
-    showBadgeCelebration(name, '🥇', '원조 기록왕');
+    await logBadgeAchievement(name, '🥇', '원조 기록왕', true);
   }
   if (!firstAchievers.exercise50 && (s.totalExercises || 0) >= 50) {
     firstAchievers.exercise50 = name; changed = true;
-    showBadgeCelebration(name, '🏃', '원조 운동왕');
+    await logBadgeAchievement(name, '🏃', '원조 운동왕', true);
   }
   if (!firstAchievers.streak30 && (s.bestStreak || 0) >= 30) {
     firstAchievers.streak30 = name; changed = true;
-    showBadgeCelebration(name, '🔥', '원조 불꽃');
+    await logBadgeAchievement(name, '🔥', '원조 불꽃', true);
   }
   if (changed) await dbPut("firstAchievers", firstAchievers);
 }
 
 // 배지 획득 축하 팝업
-function showBadgeCelebration(name, emoji, badgeName) {
+function showBadgeCelebration(name, emoji, badgeName, isHidden) {
   const m = document.getElementById("modal");
+  const sub = isHidden ? '모임 최초 달성! 배지를 획득했어요 🏆' : '배지를 획득했어요 🎊';
   m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()" style="text-align:center;padding:36px 24px">' +
     '<div style="font-size:52px;margin-bottom:14px">🎉</div>' +
     '<div style="font-size:15px;font-weight:700;color:var(--muted);margin-bottom:4px">' + esc(name) + '님이</div>' +
     '<div style="font-size:22px;font-weight:900;color:var(--accent);margin-bottom:18px">' + emoji + ' ' + esc(badgeName) + '</div>' +
-    '<div style="font-size:13px;color:var(--muted);margin-bottom:22px">모임 최초 달성! 배지를 획득했어요 🏆</div>' +
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:22px">' + sub + '</div>' +
     '<button class="save" onclick="closeModal()">확인</button>' +
     '</div></div>';
 }
@@ -3724,6 +3749,22 @@ function renderWeeklyHistoryHtml() {
 // ── 홈 화면 ──
 function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
   let html = '<div style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
+
+  // 오늘 획득한 배지
+  const todayBadges = badgeLog[fmtKey(new Date())] || [];
+  if (todayBadges.length > 0) {
+    html += '<div class="card" style="margin-top:0;background:var(--accent-soft);border:1px solid var(--accent)">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">🏅 오늘 획득한 배지</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:8px">';
+    todayBadges.forEach(b => {
+      html += '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span style="font-size:20px">' + b.emoji + '</span>' +
+        '<span style="font-size:14px;font-weight:700">' + esc(b.name) + '</span>' +
+        '<span style="font-size:13px;color:var(--muted)">' + esc(b.badgeName) + ' 획득!</span>' +
+        '</div>';
+    });
+    html += '</div></div>';
+  }
 
   // D-day 카드
   if (meetDate) {
