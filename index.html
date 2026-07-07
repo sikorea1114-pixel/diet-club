@@ -232,6 +232,8 @@ let mode = "home";
 let loaded = false;
 let pollTimer = null;
 let weeklyRecords = {}; // 역대 주간 기록
+let lifetimeStats = {}; // 멤버별 평생 누적 통계 (시즌 무관)
+let firstAchievers = {}; // 모임 최초 달성자 (히든 배지)
 let warnings = {}; // 멤버별 경고
 let thumbs = {}; // 멤버별 따봉
 let cardCollapsed = { streak: true, mvp: true, summary: true };
@@ -334,7 +336,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -348,7 +350,9 @@ async function loadAll() {
     dbGet("aiChat"),
     dbGet(seasonPath("weeklyRecords")),
     dbGet(seasonPath("warnings")),
-    dbGet(seasonPath("thumbs"))
+    dbGet(seasonPath("thumbs")),
+    dbGet("lifetimeStats"),
+    dbGet("firstAchievers")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -366,6 +370,8 @@ async function loadAll() {
   weeklyRecords = wr2 || {};
   warnings = wn || {};
   thumbs = tb || {};
+  lifetimeStats = ls || {};
+  firstAchievers = fa || {};
   loaded = true;
 }
 
@@ -386,11 +392,14 @@ async function addEntry(member, food, calories) {
   entries = [...entries, entry];
   render();
   await dbPut(seasonPath("entries") + "/" + entry.id, entry);
+  await bumpLifetimeStat(member, "totalEntries", 1);
 }
 async function removeEntry(id) {
+  const target = entries.find(e => e.id === id);
   entries = entries.filter(e => e.id !== id);
   render();
   await dbDelete(seasonPath("entries") + "/" + id);
+  if (target) await bumpLifetimeStat(target.member, "totalEntries", -1);
 }
 function shiftDay(d) { const x = new Date(date); x.setDate(x.getDate()+d); date = x; render(); }
 function shiftMonth(d) { date = new Date(date.getFullYear(), date.getMonth()+d, 1); render(); }
@@ -993,7 +1002,7 @@ function copyInvite() {
 async function start() {
   if (!DB_URL) { renderSetup(); return; }
   render();
-  try { await loadAll(); await autoSaveLastWeek(); render(); }
+  try { await loadAll(); await autoSaveLastWeek(); render(); await updateBestStreaks(); }
   catch (e) {
     // 연결 실패해도 기존 데이터 유지, loaded만 true로
     if (!loaded) { loaded = true; render(); }
@@ -2775,6 +2784,145 @@ function getMyProfile(name) {
 function saveMyProfile(name, profile) {
   try { localStorage.setItem("dietclub_profile_" + (name || ""), JSON.stringify(profile)); } catch {}
 }
+// ══════════ 배지 시스템 (평생 배지 + 히든 배지) ══════════
+
+// 평생 배지 카탈로그 - 진행률 포함
+function getLifetimeBadgeCatalog(name) {
+  const s = lifetimeStats[name] || {};
+  const totalEntries = s.totalEntries || 0;
+  const totalExercises = s.totalExercises || 0;
+  const bestStreak = s.bestStreak || 0;
+  const seasonsCount = s.seasonsCount || 0;
+  return [
+    { emoji: '📝', name: '기록 장인', desc: '누적 식단 기록 100회', current: totalEntries, target: 100, achieved: totalEntries >= 100 },
+    { emoji: '💪', name: '철인', desc: '누적 운동 기록 100회', current: totalExercises, target: 100, achieved: totalExercises >= 100 },
+    { emoji: '🔥', name: '불꽃의 의지', desc: '역대 최고 스트릭 30일', current: bestStreak, target: 30, achieved: bestStreak >= 30 },
+    { emoji: '❤️', name: '꾸준한 사람', desc: '3개 시즌 이상 참여', current: seasonsCount, target: 3, achieved: seasonsCount >= 3 }
+  ];
+}
+
+// 히든 배지 카탈로그 - 모임 최초 달성자 (한 번 가져가면 끝)
+function getHiddenBadgeCatalog() {
+  return [
+    { key: 'record100', emoji: '🥇', name: '원조 기록왕', desc: '모임 최초로 기록 100회 달성', owner: firstAchievers.record100 || null },
+    { key: 'exercise50', emoji: '🏃', name: '원조 운동왕', desc: '모임 최초로 운동 50회 달성', owner: firstAchievers.exercise50 || null },
+    { key: 'streak30', emoji: '🔥', name: '원조 불꽃', desc: '모임 최초로 스트릭 30일 달성', owner: firstAchievers.streak30 || null }
+  ];
+}
+
+// 누적 통계 업데이트 + 히든 배지 체크
+async function bumpLifetimeStat(name, field, delta) {
+  if (!name) return;
+  if (!lifetimeStats[name]) lifetimeStats[name] = { totalEntries: 0, totalExercises: 0, bestStreak: 0, seasonsCount: 0 };
+  lifetimeStats[name][field] = Math.max(0, (lifetimeStats[name][field] || 0) + delta);
+  await dbPut("lifetimeStats/" + encodeURIComponent(name) + "/" + field, lifetimeStats[name][field]);
+  await checkFirstAchievers(name);
+}
+
+// 역대 최고 스트릭 갱신 (기록/운동 화면 진입 시 기회 볼 때마다 체크)
+async function updateBestStreaks() {
+  for (const m of members) {
+    const streak = calcStreak(m.name);
+    const cur = (lifetimeStats[m.name] || {}).bestStreak || 0;
+    if (streak > cur) {
+      await bumpLifetimeStat(m.name, "bestStreak", streak - cur);
+    }
+  }
+}
+
+// 히든 배지(모임 최초 달성자) 조건 체크
+async function checkFirstAchievers(name) {
+  const s = lifetimeStats[name] || {};
+  let changed = false;
+  if (!firstAchievers.record100 && (s.totalEntries || 0) >= 100) {
+    firstAchievers.record100 = name; changed = true;
+    showBadgeCelebration(name, '🥇', '원조 기록왕');
+  }
+  if (!firstAchievers.exercise50 && (s.totalExercises || 0) >= 50) {
+    firstAchievers.exercise50 = name; changed = true;
+    showBadgeCelebration(name, '🏃', '원조 운동왕');
+  }
+  if (!firstAchievers.streak30 && (s.bestStreak || 0) >= 30) {
+    firstAchievers.streak30 = name; changed = true;
+    showBadgeCelebration(name, '🔥', '원조 불꽃');
+  }
+  if (changed) await dbPut("firstAchievers", firstAchievers);
+}
+
+// 배지 획득 축하 팝업
+function showBadgeCelebration(name, emoji, badgeName) {
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()" style="text-align:center;padding:36px 24px">' +
+    '<div style="font-size:52px;margin-bottom:14px">🎉</div>' +
+    '<div style="font-size:15px;font-weight:700;color:var(--muted);margin-bottom:4px">' + esc(name) + '님이</div>' +
+    '<div style="font-size:22px;font-weight:900;color:var(--accent);margin-bottom:18px">' + emoji + ' ' + esc(badgeName) + '</div>' +
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:22px">모임 최초 달성! 배지를 획득했어요 🏆</div>' +
+    '<button class="save" onclick="closeModal()">확인</button>' +
+    '</div></div>';
+}
+
+// 배지 컬렉션 화면
+function openBadgeCollection() {
+  const targetName = view !== "all" ? view : (members[0] && members[0].name) || "";
+  const m = document.getElementById("modal");
+  const lifetimeCatalog = targetName ? getLifetimeBadgeCatalog(targetName) : [];
+  const hiddenCatalog = getHiddenBadgeCatalog();
+
+  let html = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>🏅 배지 컬렉션</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>';
+
+  if (members.length > 1) {
+    html += '<div class="mpick">';
+    members.forEach(mb => {
+      html += '<button onclick="closeModal();view=\'' + esc(mb.name) + '\';openBadgeCollection()" style="' + (mb.name === targetName ? 'border-color:var(--accent);background:var(--accent-soft);color:var(--accent)' : '') + '"><span class="d" style="background:' + colorOf(mb.name) + '"></span>' + esc(mb.name) + '</button>';
+    });
+    html += '</div>';
+  }
+
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">✨ 평생 배지</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">';
+  lifetimeCatalog.forEach(b => {
+    const pct = Math.min(100, Math.round(b.current / b.target * 100));
+    html += '<div style="padding:14px;border-radius:14px;background:' + (b.achieved ? 'var(--accent-soft)' : 'var(--bg)') + ';border:1px solid ' + (b.achieved ? 'var(--accent)' : 'var(--line)') + '">';
+    html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<span style="font-size:20px">' + (b.achieved ? b.emoji : '🔒') + '</span>' +
+      '<span style="font-size:14px;font-weight:800">' + esc(b.name) + '</span>' +
+      (b.achieved ? '<span style="font-size:11px;color:var(--accent);font-weight:700;margin-left:auto">달성!</span>' : '') +
+      '</div>';
+    html += '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' + esc(b.desc) + '</div>';
+    html += '<div style="height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-bottom:4px">' +
+      '<div style="height:100%;width:' + pct + '%;background:' + (b.achieved ? 'var(--accent)' : 'var(--faint)') + ';border-radius:99px"></div></div>';
+    html += '<div style="font-size:11px;color:var(--faint);text-align:right">' + Math.min(b.current, b.target) + ' / ' + b.target + '</div>';
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🔒 히든 배지 (모임 최초 달성자)</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:10px">';
+  hiddenCatalog.forEach(b => {
+    const claimed = !!b.owner;
+    html += '<div style="padding:14px;border-radius:14px;background:' + (claimed ? 'var(--accent-soft)' : 'var(--bg)') + ';border:1px solid ' + (claimed ? 'var(--accent)' : 'var(--line)') + '">';
+    if (claimed) {
+      html += '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span style="font-size:20px">' + b.emoji + '</span>' +
+        '<div><div style="font-size:14px;font-weight:800">' + esc(b.name) + '</div>' +
+        '<div style="font-size:12px;color:var(--accent);font-weight:700">👑 ' + esc(b.owner) + '님이 최초 달성</div></div>' +
+        '</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span style="font-size:20px">🔒</span>' +
+        '<div><div style="font-size:14px;font-weight:800;color:var(--muted)">??? </div>' +
+        '<div style="font-size:12px;color:var(--faint)">획득 후 공개돼요</div></div>' +
+        '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '</div></div>';
+  m.innerHTML = html;
+}
+
 function calcBadges(memberName) {
   const mEntries = entries.filter(e => e.member === memberName);
   const mExercises = exercises.filter(e => e.member === memberName);
@@ -2980,12 +3128,15 @@ async function submitExercise() {
   exercises.push(data);
   closeModal();
   await loadAll(); render();
+  await bumpLifetimeStat(name, "totalExercises", 1);
 }
 
 async function removeExercise(id) {
+  const target = exercises.find(e => e.id === id);
   exercises = exercises.filter(e => e.id !== id);
   await dbDelete(seasonPath("exercises") + "/" + id);
   await loadAll(); render();
+  if (target) await bumpLifetimeStat(target.member, "totalExercises", -1);
 }
 
 function openEditExercise(id) {
@@ -3215,6 +3366,13 @@ async function endSeason(goalResults = {}) {
     await dbPut("seasons/" + currentSeasonId + "/ended", true);
     if (seasons[currentSeasonId]) { seasons[currentSeasonId].ended = true; seasons[currentSeasonId].hall = hall; }
   }
+
+  // 평생 배지 - 시즌 참여 카운트 (기록 1건 이상 있으면 참여로 인정)
+  for (const m of members) {
+    const participated = entries.some(e => e.member === m.name);
+    if (participated) await bumpLifetimeStat(m.name, "seasonsCount", 1);
+  }
+
   await loadAll(); render();
 }
 
@@ -3613,7 +3771,10 @@ function renderMukbangHtml() {
     const maxScore = Math.max(1, ...scoreData.map(m => m.score));
     const scoreMedals = ['🥇','🥈','🥉'];
     html += '<div class="card" style="margin-top:0">';
-    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:4px">⭐ 시즌 다이어트 점수</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted)">⭐ 시즌 다이어트 점수</div>';
+    html += '<button onclick="openBadgeCollection()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">🏅 배지 컬렉션</button>';
+    html += '</div>';
     html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">기록일 +10 · 운동 +5 · 1500kcal이하 +5 · 2000kcal초과 -5 · 경고 -3</div>';
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
     scoreData.forEach((m, i) => {
@@ -4387,7 +4548,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection });
 
 start();
 </script>
