@@ -588,7 +588,7 @@ function render() {
       html += '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">';
       if (hall.mvp) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span style="font-size:14px;color:var(--muted);font-weight:700">👑 시즌 MVP</span>' +
-        '<span style="font-size:15px;font-weight:800">' + esc(hall.mvp.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.mvp.days + '일 기록</span></span></div>';
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.mvp.name) + ' <span style="color:var(--muted);font-size:12px">' + (hall.mvp.score !== undefined ? hall.mvp.score + '점' : hall.mvp.days + '일 기록') + '</span></span></div>';
       if (hall.streak) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span style="font-size:14px;color:var(--muted);font-weight:700">🔥 최장 스트릭</span>' +
         '<span style="font-size:15px;font-weight:800">' + esc(hall.streak.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.streak.streak + '일 연속</span></span></div>';
@@ -2867,19 +2867,16 @@ function getCurrentSeasonLeaders() {
     return { name: m.name, score };
   }).filter(Boolean).filter(m => m.score > 0).sort((a,b) => b.score - a.score);
 
-  // MVP (기록일수 1위, 동점이면 칼로리 적은 사람)
-  const mvpData = members.map(m => {
-    const mEntries = entries.filter(e => e.member === m.name && e.calories > 0);
-    const days = new Set(mEntries.map(e => e.date)).size;
-    const kcal = mEntries.reduce((s, e) => s + e.calories, 0);
-    return { name: m.name, days, kcal };
-  }).filter(m => m.days > 0).sort((a,b) => b.days !== a.days ? b.days - a.days : a.kcal - b.kcal);
+  // MVP (시즌 다이어트 점수 1위 — 동점이면 총 칼로리 적은 사람)
+  const mvpData = members.map(m => calcSeasonScore(m.name))
+    .filter(m => m.recordDays > 0)
+    .sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
 
   // 최장 스트릭
   const streakData = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).sort((a,b) => b.streak - a.streak);
 
   const leaders = {};
-  if (mvpData.length) leaders.mvp = { name: mvpData[0].name, emoji: '👑', label: 'MVP', desc: mvpData[0].days + '일 기록으로 1위' };
+  if (mvpData.length) leaders.mvp = { name: mvpData[0].name, emoji: '👑', label: 'MVP', desc: mvpData[0].score + '점으로 1위' };
   if (mukbangData.length) leaders.mukbang = { name: mukbangData[0].name, emoji: '🍽️', label: '먹방왕', desc: mukbangData[0].kcal.toLocaleString() + 'kcal로 1위' };
   if (exerciseData.length) leaders.exercise = { name: exerciseData[0].name, emoji: '💪', label: '운동왕', desc: '-' + exerciseData[0].burned.toLocaleString() + 'kcal로 1위' };
   if (healthData.length) leaders.health = { name: healthData[0].name, emoji: '🥗', label: '건강왕', desc: healthData[0].score + '점으로 1위' };
@@ -3592,14 +3589,11 @@ async function endSeason(goalResults = {}) {
   // 명예의 전당 계산
   const hall = {};
 
-  // MVP (기록일수 1위, 동점이면 칼로리 적은 사람)
-  const mvpData = members.map(m => {
-    const mEntries = entries.filter(e => e.member === m.name && e.calories > 0);
-    const days = new Set(mEntries.map(e => e.date)).size;
-    const kcal = mEntries.reduce((s, e) => s + e.calories, 0);
-    return { name: m.name, days, kcal };
-  }).filter(m => m.days > 0).sort((a,b) => b.days !== a.days ? b.days - a.days : a.kcal - b.kcal);
-  if (mvpData.length) hall.mvp = { name: mvpData[0].name, days: mvpData[0].days };
+  // MVP (시즌 다이어트 점수 1위 — 동점이면 총 칼로리 적은 사람)
+  const mvpData = members.map(m => calcSeasonScore(m.name))
+    .filter(m => m.recordDays > 0)
+    .sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
+  if (mvpData.length) hall.mvp = { name: mvpData[0].name, days: mvpData[0].recordDays, score: mvpData[0].score };
 
   // 최장 스트릭
   const streakData = members.map(m => ({ name: m.name, streak: calcStreak(m.name) }))
@@ -3753,17 +3747,18 @@ async function autoSaveLastWeek() {
     return { name: m.name, burned: mEx.reduce((s,e) => s + e.burned, 0) };
   }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
 
-  // MVP (다이어트 점수 기준)
+  // MVP (다이어트 점수 기준, 동점이면 칼로리 적은 사람)
   const weekDays2 = [];
   for (let i = 0; i < 7; i++) {
     const d = new Date(lwr.start); d.setDate(lwr.start.getDate() + i);
     weekDays2.push(fmtKey(d));
   }
   const mvpData = members.map(m => {
-    let score = 0, recordDays = 0;
+    let score = 0, recordDays = 0, totalKcal = 0;
     weekDays2.forEach(d => {
       const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.calories, 0);
       if (!dayKcal) return;
+      totalKcal += dayKcal;
       const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
       const netKcal = dayKcal - dayBurned;
       score += 10;
@@ -3777,8 +3772,8 @@ async function autoSaveLastWeek() {
     const thumbCount = (thumbs[m.name] || {}).count || 0;
     score -= warningCount * 3;
     score += thumbCount * 3;
-    return { name: m.name, score, recordDays };
-  }).filter(m => m.recordDays > 0).sort((a,b) => b.score - a.score);
+    return { name: m.name, score, recordDays, totalKcal };
+  }).filter(m => m.recordDays > 0).sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
 
   // 건강왕
   const healthData = members.map(m => {
@@ -4027,10 +4022,11 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
     const weekDaysArr = [];
     for (let i = 0; i < 7; i++) { const d = new Date(wr2.start); d.setDate(wr2.start.getDate()+i); weekDaysArr.push(fmtKey(d)); }
     const mvpData = members.map(m => {
-      let score = 0, recordDays = 0;
+      let score = 0, recordDays = 0, totalKcal = 0;
       weekDaysArr.forEach(d => {
         const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s+e.calories, 0);
         if (!dayKcal) return;
+        totalKcal += dayKcal;
         const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s+e.burned, 0);
         const netKcal = dayKcal - dayBurned;
         score += 10;
@@ -4040,8 +4036,8 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
       });
       const exDays = new Set(exercises.filter(e => e.member === m.name && weekDaysArr.includes(e.date)).map(e => e.date)).size;
       score += exDays * 5;
-      return { name: m.name, score, recordDays };
-    }).filter(m => m.recordDays > 0).sort((a,b) => b.score - a.score);
+      return { name: m.name, score, recordDays, totalKcal };
+    }).filter(m => m.recordDays > 0).sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
 
     if (mvpData.length > 0) {
       const mvp = mvpData[0];
@@ -4843,6 +4839,30 @@ function streakEmoji(n) {
   if (n >= 7)  return '🔥🔥';
   return '🔥';
 }
+// ⭐ 시즌 다이어트 점수 계산 (MVP 판정에도 동일하게 사용 — 동점 시 순서 편향 방지)
+function calcSeasonScore(name) {
+  const mEntries = entries.filter(e => e.member === name);
+  const mExercises = exercises.filter(e => e.member === name);
+  const recordDays = [...new Set(mEntries.map(e => e.date))];
+  const exDays = [...new Set(mExercises.map(e => e.date))];
+  const warningCount = (warnings[name] || {}).count || 0;
+  const thumbCount = (thumbs[name] || {}).count || 0;
+  let score = 0;
+  score += recordDays.length * 10;
+  score += exDays.length * 5;
+  score -= warningCount * 3;
+  score += thumbCount * 3;
+  let totalKcal = 0;
+  recordDays.forEach(d => {
+    const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
+    totalKcal += dayKcal;
+    if (dayKcal === 0) return;
+    if (dayKcal <= 1500) score += 5;
+    if (dayKcal > 2000) score -= 5;
+  });
+  return { name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount, totalKcal };
+}
+
 function calcStreak(memberName) {
   // timestamp 기준 - 실제 기록한 날짜로만 계산 (소급 입력 불가)
   const dates = [...new Set(
