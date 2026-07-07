@@ -622,19 +622,6 @@ function render() {
         });
         html += '</div>';
       }
-      if (hall.badges && hall.badges.length > 0) {
-        html += '<div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">';
-        html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🏅 시즌 배지</div>';
-        hall.badges.forEach(mb => {
-          html += '<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:4px">' + esc(mb.name) + '</div>';
-          html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
-          mb.badges.forEach(b => {
-            html += '<span style="font-size:11px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:3px 8px;font-weight:700">' + b.emoji + ' ' + b.name + '</span>';
-          });
-          html += '</div></div>';
-        });
-        html += '</div>';
-      }
       html += '</div></div>';
     }
   }
@@ -790,7 +777,7 @@ function render() {
   const isTodayView = fmtKey(date) === fmtKey(new Date());
   if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && isTodayView) html += '<button class="fab" style="bottom:calc(136px + env(safe-area-inset-bottom))" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
   if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && isTodayView) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
-  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && !isTodayView && (isRecord || isWeek || isMonth)) html += '<div style="position:fixed;bottom:calc(62px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:12px;font-weight:700;color:var(--muted)">📌 오늘 날짜에서만 기록할 수 있어요</div>';
+  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && !isTodayView && (isRecord || isWeek || isMonth)) html += '<div style="position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:14px 24px;font-size:12px;font-weight:700;color:var(--muted)">📌 오늘 날짜에서만 기록할 수 있어요</div>';
   if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
   if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
   if (isReadOnly) html += '<div style="position:fixed;bottom:calc(62px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
@@ -3198,53 +3185,6 @@ function openBadgeCollection() {
   m.innerHTML = html;
 }
 
-function calcBadges(memberName) {
-  const mEntries = entries.filter(e => e.member === memberName);
-  const mExercises = exercises.filter(e => e.member === memberName);
-  const recordDays = [...new Set(mEntries.map(e => e.date))];
-  const exDays = [...new Set(mExercises.map(e => e.date))];
-  const streak = calcStreak(memberName);
-  const badges = [];
-
-  // ⚡ 첫 발걸음
-  if (recordDays.length >= 1) badges.push({ emoji: '⚡', name: '첫 발걸음' });
-
-  // 🔥 불꽃 다이어터 — 스트릭 30일 이상
-  if (streak >= 30) badges.push({ emoji: '🔥', name: '불꽃 다이어터' });
-
-  // 📋 성실러 — 기록일 50일 이상
-  if (recordDays.length >= 50) badges.push({ emoji: '📋', name: '성실러' });
-
-  // 👑 개근왕 — 시즌 시작 이후 오늘까지 하루도 빠짐없이
-  if (recordDays.length >= 1) {
-    const allDates = [...recordDays].sort();
-    const start = new Date(allDates[0]);
-    const today = new Date(); today.setHours(0,0,0,0);
-    const totalDays = Math.round((today - start) / 86400000) + 1;
-    if (recordDays.length >= totalDays && totalDays >= 7) badges.push({ emoji: '👑', name: '개근왕' });
-  }
-
-  // 💪 운동 머신 — 운동 30일 이상
-  if (exDays.length >= 30) badges.push({ emoji: '💪', name: '운동 머신' });
-
-  // 🥗 절제의 왕 — 순칼로리 1500 이하 20일 이상
-  const lowKcalDays = recordDays.filter(d => {
-    const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
-    const dayBurned = mExercises.filter(e => e.date === d).reduce((s,e) => s + e.burned, 0);
-    return dayKcal > 0 && (dayKcal - dayBurned) <= 1500;
-  });
-  if (lowKcalDays.length >= 20) badges.push({ emoji: '🥗', name: '절제의 왕' });
-
-  // 💣 먹방러 — 2000kcal 초과 10일 이상 (불명예)
-  const highKcalDays = recordDays.filter(d => {
-    const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
-    return dayKcal > 2000;
-  });
-  if (highKcalDays.length >= 10) badges.push({ emoji: '💣', name: '먹방러' });
-
-  return badges;
-}
-
 function calcBMR(profile) {
   // 해리스-베네딕트 공식
   const { gender, age, height, weight } = profile;
@@ -3656,13 +3596,6 @@ async function endSeason(goalResults = {}) {
     result: goalResults[m.name] || "none"
   }));
   hall.goals = goalSummary;
-
-  // 시즌 배지
-  const badgeSummary = members.map(mb => ({
-    name: mb.name,
-    badges: calcBadges(mb.name)
-  })).filter(mb => mb.badges.length > 0);
-  hall.badges = badgeSummary;
 
   // Firebase에 저장
   if (currentSeasonId === "default") {
@@ -4137,14 +4070,6 @@ function renderMukbangHtml() {
       html += '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + m.score + '점</span>';
       html += '</div>';
       html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">' + m.recordDays + '일 기록 · 운동 ' + m.exDays + '일' + (m.warningCount > 0 ? ' · ⚠️-' + (m.warningCount*3) + '점' : '') + (m.thumbCount > 0 ? ' · 👍+' + (m.thumbCount*3) + '점' : '') + '</div>';
-      const badges = calcBadges(m.name);
-      if (badges.length > 0) {
-        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';
-        badges.forEach(b => {
-          html += '<span style="font-size:11px;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:2px 8px;font-weight:700">' + b.emoji + ' ' + b.name + '</span>';
-        });
-        html += '</div>';
-      }
       html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
         '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'var(--accent)':colorOf(m.name)) + ';border-radius:99px"></div></div>';
       html += '</div>';
