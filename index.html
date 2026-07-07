@@ -234,6 +234,7 @@ let pollTimer = null;
 let weeklyRecords = {}; // 역대 주간 기록
 let warnings = {}; // 멤버별 경고
 let thumbs = {}; // 멤버별 따봉
+let reactions = {}; // 기록별 리액션
 let cardCollapsed = { streak: true, mvp: true, summary: true };
 let openedDays = new Set(); // 주간/월별에서 열린 날짜 uid 저장
 let pledges = {};
@@ -334,7 +335,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, rx] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -348,7 +349,8 @@ async function loadAll() {
     dbGet("aiChat"),
     dbGet(seasonPath("weeklyRecords")),
     dbGet(seasonPath("warnings")),
-    dbGet(seasonPath("thumbs"))
+    dbGet(seasonPath("thumbs")),
+    dbGet(seasonPath("reactions"))
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -366,6 +368,7 @@ async function loadAll() {
   weeklyRecords = wr2 || {};
   warnings = wn || {};
   thumbs = tb || {};
+  reactions = rx || {};
   loaded = true;
 }
 
@@ -766,12 +769,43 @@ function exerciseCard(e) {
 
 function entryCard(e) {
   const c = colorOf(e.member);
+  const entryReactions = reactions[e.id] || {};
+  const EMOJIS = ['👍','❤️','😮'];
+  let reactionHtml = '<div style="display:flex;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">';
+  EMOJIS.forEach(emoji => {
+    const voters = entryReactions[emoji] || {};
+    const count = Object.keys(voters).length;
+    const myName = view !== "all" ? view : "";
+    const active = myName && voters[myName];
+    reactionHtml += '<button onclick="event.stopPropagation();toggleReaction(\'' + e.id + '\',\'' + emoji + '\')" style="border:1px solid ' + (active ? 'var(--accent)' : 'var(--line)') + ';background:' + (active ? 'var(--accent-soft)' : 'transparent') + ';border-radius:99px;padding:3px 10px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:4px">' +
+      emoji + (count > 0 ? '<span style="font-size:12px;font-weight:700;color:' + (active ? 'var(--accent)' : 'var(--muted)') + '">' + count + '</span>' : '') +
+      '</button>';
+  });
+  reactionHtml += '</div>';
+
   return '<div class="entry" onclick="toggleEntry(this)">' +
     '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(avatarOf(e.member)) + '</span>' +
-    '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + (fmtKey(new Date(e.timestamp)) !== e.date ? '<span style="color:#E0726A">당일 기록 아님</span> · ' : '') + fmtTime(e.timestamp) + '</div></div>' +
+    '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + (fmtKey(new Date(e.timestamp)) !== e.date ? '<span style="color:#E0726A">당일 기록 아님</span> · ' : '') + fmtTime(e.timestamp) + '</div>' +
+    reactionHtml + '</div>' +
     '<span class="kc tnum">' + e.calories.toLocaleString() + '<small> kcal</small></span>' +
     '<button class="del" onclick="event.stopPropagation();openEditEntry(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
     '<button class="del" onclick="event.stopPropagation();removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
+}
+
+// ── 리액션 ──
+async function toggleReaction(entryId, emoji) {
+  if (view === "all") { alert("이름을 선택 후 리액션을 남겨보세요!"); return; }
+  const path = seasonPath("reactions") + "/" + entryId + "/" + encodeURIComponent(emoji) + "/" + view;
+  if (!reactions[entryId]) reactions[entryId] = {};
+  if (!reactions[entryId][emoji]) reactions[entryId][emoji] = {};
+  if (reactions[entryId][emoji][view]) {
+    delete reactions[entryId][emoji][view];
+    await dbDelete(path);
+  } else {
+    reactions[entryId][emoji][view] = true;
+    await dbPut(path, true);
+  }
+  render();
 }
 
 // ── 입력 팝업 ──
@@ -4312,7 +4346,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, toggleReaction });
 
 start();
 </script>
