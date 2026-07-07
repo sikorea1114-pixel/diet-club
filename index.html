@@ -2859,6 +2859,62 @@ async function logBadgeAchievement(name, emoji, badgeName, isHidden) {
   showBadgeCelebration(name, emoji, badgeName, !!isHidden);
 }
 
+// 이성호 전용: 지금까지의 모든 시즌 기록을 소급 집계해서 lifetimeStats 재계산
+async function recalcLifetimeStats() {
+  if (view !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  if (!confirm("지금까지의 모든 기록을 기준으로 배지 진행률을 다시 계산할까요?")) return;
+
+  const seasonIds = ["default", ...Object.keys(seasons || {})];
+  const allEntries = [];
+  const allExercises = [];
+  const participatedSeasons = {}; // name -> Set(seasonId)
+
+  for (const sid of seasonIds) {
+    const entriesPath = sid === "default" ? "entries" : "seasons/" + sid + "/entries";
+    const exercisesPath = sid === "default" ? "exercises" : "seasons/" + sid + "/exercises";
+    const [e, ex] = await Promise.all([dbGet(entriesPath), dbGet(exercisesPath)]);
+    const eArr = e ? Object.values(e) : [];
+    const exArr = ex ? Object.values(ex) : [];
+    eArr.forEach(en => {
+      allEntries.push(en);
+      if (!participatedSeasons[en.member]) participatedSeasons[en.member] = new Set();
+      participatedSeasons[en.member].add(sid);
+    });
+    exArr.forEach(exn => allExercises.push(exn));
+  }
+
+  for (const m of members) {
+    const name = m.name;
+    const mEntries = allEntries.filter(e => e.member === name);
+    const mExercises = allExercises.filter(e => e.member === name);
+    const totalEntries = mEntries.length;
+    const totalExercises = mExercises.length;
+    const seasonsCount = participatedSeasons[name] ? participatedSeasons[name].size : 0;
+
+    // 전체 기간 통틀어 최고 연속 기록일 계산 (실제 입력 시각 기준)
+    const dateSet = new Set(mEntries.map(e => fmtKey(new Date(e.timestamp))));
+    const sortedDates = [...dateSet].sort();
+    let best = 0, cur = 0, prevDate = null;
+    sortedDates.forEach(d => {
+      cur = (prevDate && (new Date(d) - new Date(prevDate)) / 86400000 === 1) ? cur + 1 : 1;
+      best = Math.max(best, cur);
+      prevDate = d;
+    });
+
+    lifetimeStats[name] = {
+      totalEntries,
+      totalExercises,
+      bestStreak: Math.max(best, (lifetimeStats[name] || {}).bestStreak || 0),
+      seasonsCount
+    };
+    await dbPut("lifetimeStats/" + encodeURIComponent(name), lifetimeStats[name]);
+    await checkFirstAchievers(name);
+  }
+
+  alert("지금까지의 기록을 반영했어요! 🎉");
+  render();
+}
+
 // 역대 최고 스트릭 갱신 (기록/운동 화면 진입 시 기회 볼 때마다 체크)
 async function updateBestStreaks() {
   for (const m of members) {
@@ -2948,6 +3004,10 @@ function openBadgeCollection() {
 
   let html = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
     '<div class="phead"><h2>🏅 배지 컬렉션</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>';
+
+  if (view === "이성호") {
+    html += '<button onclick="recalcLifetimeStats()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">🔄 지금까지의 기록 반영하기</button>';
+  }
 
   if (members.length > 1) {
     html += '<div class="mpick">';
@@ -4722,7 +4782,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats });
 
 start();
 </script>
