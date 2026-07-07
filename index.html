@@ -689,7 +689,7 @@ function render() {
           html += '</div></div>';
         });
       }
-    } else if (shown.length === 0) {
+    } else if (shown.length === 0 && shownEx.length === 0) {
       html += '<div class="empty">아직 기록이 없어요.<br>아래 + 버튼으로 먹은 걸 적어보세요.</div>';
     } else {
       const meals = [
