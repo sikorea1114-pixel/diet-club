@@ -642,7 +642,9 @@ function render() {
   members.forEach(m => {
     const streak = calcStreak(m.name);
     const streakBadge = streak >= 2 ? ' <span style="font-size:12px">' + streakEmoji(streak) + streak + '</span>' : '';
-    const repBadge = representativeBadges[m.name] ? ' <span style="font-size:12px" title="' + esc(representativeBadges[m.name].name) + '">' + representativeBadges[m.name].emoji + '</span>' : '';
+    const rep = representativeBadges[m.name];
+    const repValid = rep && isRepBadgeValid(m.name, rep);
+    const repBadge = repValid ? ' <span style="font-size:12px" title="' + esc(rep.name) + '">' + rep.emoji + '</span>' : '';
     html += '<button class="chip ' + (view===m.name?"on":"") + '" onclick="setView(\'' + esc(m.name).replace(/'/g,"\\'") + '\')">' +
       repBadge + '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + streakBadge + '</button>';
   });
@@ -2829,6 +2831,68 @@ function getHiddenBadgeCatalog() {
   ];
 }
 
+// 🎖️ 현재 시즌 실시간 배지 — 지금 이 시즌에서 1등인 사람에게만 부여, 시즌 종료 시 회수
+function getCurrentSeasonLeaders() {
+  // 먹방왕 (시즌 전체 칼로리 총합)
+  const mukbangData = members.map(m => {
+    const kcal = entries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
+    return { name: m.name, kcal };
+  }).filter(m => m.kcal > 0).sort((a,b) => b.kcal - a.kcal);
+
+  // 운동왕 (시즌 전체 소모 칼로리 총합)
+  const exerciseData = members.map(m => {
+    const burned = exercises.filter(e => e.member === m.name).reduce((s,e) => s + e.burned, 0);
+    return { name: m.name, burned };
+  }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
+
+  // 건강왕 (신체정보 설정자만, 시즌 전체 건강점수 합산)
+  const healthData = members.map(m => {
+    const profile = getMyProfile(m.name);
+    if (!profile) return null;
+    const tdee = calcTDEE(profile);
+    const mEntries = entries.filter(e => e.member === m.name);
+    const recordDaysList = [...new Set(mEntries.map(e => e.date))];
+    let score = 0;
+    recordDaysList.forEach(d => {
+      const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
+      if (!dayKcal) return;
+      const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
+      const pct = (dayKcal - dayBurned) / tdee * 100;
+      if (pct >= 80 && pct <= 110) score += 10;
+      else if (pct >= 70) score += 7;
+      else if (pct <= 130) score += 5;
+      else score += 2;
+      if (dayBurned > 0) score += 3;
+    });
+    return { name: m.name, score };
+  }).filter(Boolean).filter(m => m.score > 0).sort((a,b) => b.score - a.score);
+
+  // MVP (기록일수 1위, 동점이면 칼로리 적은 사람)
+  const mvpData = members.map(m => {
+    const mEntries = entries.filter(e => e.member === m.name && e.calories > 0);
+    const days = new Set(mEntries.map(e => e.date)).size;
+    const kcal = mEntries.reduce((s, e) => s + e.calories, 0);
+    return { name: m.name, days, kcal };
+  }).filter(m => m.days > 0).sort((a,b) => b.days !== a.days ? b.days - a.days : a.kcal - b.kcal);
+
+  // 최장 스트릭
+  const streakData = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).sort((a,b) => b.streak - a.streak);
+
+  const leaders = {};
+  if (mvpData.length) leaders.mvp = { name: mvpData[0].name, emoji: '👑', label: 'MVP', desc: mvpData[0].days + '일 기록으로 1위' };
+  if (mukbangData.length) leaders.mukbang = { name: mukbangData[0].name, emoji: '🍽️', label: '먹방왕', desc: mukbangData[0].kcal.toLocaleString() + 'kcal로 1위' };
+  if (exerciseData.length) leaders.exercise = { name: exerciseData[0].name, emoji: '💪', label: '운동왕', desc: '-' + exerciseData[0].burned.toLocaleString() + 'kcal로 1위' };
+  if (healthData.length) leaders.health = { name: healthData[0].name, emoji: '🥗', label: '건강왕', desc: healthData[0].score + '점으로 1위' };
+  if (streakData.length && streakData[0].streak > 0) leaders.streak = { name: streakData[0].name, emoji: '🔥', label: '최장 스트릭', desc: streakData[0].streak + '일 연속으로 1위' };
+  return leaders;
+}
+
+// 특정 멤버가 지금 보유 중인 시즌 배지 목록
+function getCurrentSeasonBadgesFor(name) {
+  const leaders = getCurrentSeasonLeaders();
+  return Object.values(leaders).filter(l => l.name === name);
+}
+
 // 누적 통계 업데이트 + 히든 배지 체크
 async function bumpLifetimeStat(name, field, delta) {
   if (!name) return;
@@ -2971,6 +3035,9 @@ async function grantLifetimeTitle(name, emoji, label) {
 
 function getAllAchievedBadges(name) {
   const list = [];
+  getCurrentSeasonBadgesFor(name).forEach(b => {
+    list.push({ key: 'season:' + b.label, emoji: b.emoji, name: b.label });
+  });
   getLifetimeBadgeCatalog(name).forEach(b => {
     if (b.achieved) list.push({ key: 'lifetime:' + b.name, emoji: b.emoji, name: b.name });
   });
@@ -2981,6 +3048,16 @@ function getAllAchievedBadges(name) {
     list.push({ key: 'title:' + i + ':' + t.awardedAt, emoji: t.emoji, name: t.label });
   });
   return list;
+}
+
+// 대표 배지가 지금도 유효한지 체크 (시즌 배지는 순위 바뀌면 무효화됨)
+function isRepBadgeValid(name, rep) {
+  if (!rep) return false;
+  if (rep.key && rep.key.startsWith('season:')) {
+    const label = rep.key.slice('season:'.length);
+    return getCurrentSeasonBadgesFor(name).some(b => b.label === label);
+  }
+  return true; // 평생 배지 / 히든 배지 / 시즌 타이틀은 영구
 }
 
 // 대표 배지 설정/해제
@@ -3037,14 +3114,36 @@ function openBadgeCollection() {
     }
   }
 
-  // 시즌 타이틀 (영구 보관)
+  // 시즌 타이틀 (영구 보관) → 이름 명확히 "지난 시즌 타이틀"로 변경
   if (targetName) {
     const titles = lifetimeTitles[targetName] || [];
     if (titles.length > 0) {
-      html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🏆 시즌 타이틀</div>';
+      html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🏆 지난 시즌 타이틀</div>';
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">';
       titles.slice().reverse().forEach(t => {
         html += '<span style="border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700">' + t.emoji + ' ' + esc(t.label) + '</span>';
+      });
+      html += '</div>';
+    }
+  }
+
+  // 🎖️ 이번 시즌 배지 (진행 중, 실시간 1등, 시즌 종료 시 회수)
+  if (targetName) {
+    const seasonBadges = getCurrentSeasonBadgesFor(targetName);
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:2px">🎖️ 이번 시즌 배지</div>';
+    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:10px">지금 1등인 부문만 표시돼요 · 시즌 종료 시 회수되고 지난 시즌 타이틀로 전환돼요</div>';
+    if (seasonBadges.length === 0) {
+      html += '<div style="font-size:12px;color:var(--faint);margin-bottom:20px">현재 1등인 부문이 없어요.</div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">';
+      seasonBadges.forEach(b => {
+        html += '<div style="padding:14px;border-radius:14px;background:var(--accent-soft);border:1px solid var(--accent)">';
+        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+          '<span style="font-size:20px">' + b.emoji + '</span>' +
+          '<span style="font-size:14px;font-weight:800">' + esc(b.label) + '</span>' +
+          '<span style="font-size:11px;color:var(--accent);font-weight:700;margin-left:auto">보유중</span></div>';
+        html += '<div style="font-size:12px;color:var(--muted)">' + esc(b.desc) + '</div>';
+        html += '</div>';
       });
       html += '</div>';
     }
