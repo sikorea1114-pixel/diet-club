@@ -234,6 +234,8 @@ let pollTimer = null;
 let weeklyRecords = {}; // 역대 주간 기록
 let lifetimeStats = {}; // 멤버별 평생 누적 통계 (시즌 무관)
 let firstAchievers = {}; // 모임 최초 달성자 (히든 배지)
+let representativeBadges = {}; // 멤버별 대표 배지
+let lifetimeTitles = {}; // 멤버별 시즌 타이틀 (평생 보관, 시즌 종료 시 부여)
 let warnings = {}; // 멤버별 경고
 let thumbs = {}; // 멤버별 따봉
 let cardCollapsed = { streak: true, mvp: true, summary: true };
@@ -336,7 +338,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -352,7 +354,9 @@ async function loadAll() {
     dbGet(seasonPath("warnings")),
     dbGet(seasonPath("thumbs")),
     dbGet("lifetimeStats"),
-    dbGet("firstAchievers")
+    dbGet("firstAchievers"),
+    dbGet("representativeBadges"),
+    dbGet("lifetimeTitles")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -372,6 +376,8 @@ async function loadAll() {
   thumbs = tb || {};
   lifetimeStats = ls || {};
   firstAchievers = fa || {};
+  representativeBadges = rb || {};
+  lifetimeTitles = lt || {};
   loaded = true;
 }
 
@@ -586,6 +592,15 @@ function render() {
       if (hall.record) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span style="font-size:14px;color:var(--muted);font-weight:700">📋 최다 기록</span>' +
         '<span style="font-size:15px;font-weight:800">' + esc(hall.record.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.record.days + '일</span></span></div>';
+      if (hall.mukbangKing) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">🍽️ 먹방왕</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.mukbangKing.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.mukbangKing.kcal.toLocaleString() + ' kcal</span></span></div>';
+      if (hall.exerciseKing) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">💪 운동왕</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.exerciseKing.name) + ' <span style="color:var(--muted);font-size:12px">-' + hall.exerciseKing.burned.toLocaleString() + ' kcal</span></span></div>';
+      if (hall.healthKing) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
+        '<span style="font-size:14px;color:var(--muted);font-weight:700">🥗 건강왕</span>' +
+        '<span style="font-size:15px;font-weight:800">' + esc(hall.healthKing.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.healthKing.score + '점</span></span></div>';
       if (hall.goals && hall.goals.length > 0) {
         html += '<div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">';
         html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🎯 시즌 목표</div>';
@@ -624,8 +639,9 @@ function render() {
   members.forEach(m => {
     const streak = calcStreak(m.name);
     const streakBadge = streak >= 2 ? ' <span style="font-size:12px">' + streakEmoji(streak) + streak + '</span>' : '';
+    const repBadge = representativeBadges[m.name] ? ' <span style="font-size:12px" title="' + esc(representativeBadges[m.name].name) + '">' + representativeBadges[m.name].emoji + '</span>' : '';
     html += '<button class="chip ' + (view===m.name?"on":"") + '" onclick="setView(\'' + esc(m.name).replace(/'/g,"\\'") + '\')">' +
-      '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + streakBadge + '</button>';
+      repBadge + '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + streakBadge + '</button>';
   });
   html += '<button class="chip add" onclick="openMember()">' + iconPlus(15) + ' 멤버</button>';
   html += '</div>';
@@ -2861,7 +2877,44 @@ function showBadgeCelebration(name, emoji, badgeName) {
     '</div></div>';
 }
 
-// 배지 컬렉션 화면
+// 시즌 타이틀 영구 부여 (시즌 종료 시 호출)
+async function grantLifetimeTitle(name, emoji, label) {
+  if (!name) return;
+  const cur = lifetimeTitles[name] || [];
+  const entry = { emoji, label, awardedAt: Date.now() };
+  const updated = [...cur, entry];
+  lifetimeTitles[name] = updated;
+  await dbPut("lifetimeTitles/" + encodeURIComponent(name), updated);
+}
+
+
+function getAllAchievedBadges(name) {
+  const list = [];
+  getLifetimeBadgeCatalog(name).forEach(b => {
+    if (b.achieved) list.push({ key: 'lifetime:' + b.name, emoji: b.emoji, name: b.name });
+  });
+  getHiddenBadgeCatalog().forEach(b => {
+    if (b.owner === name) list.push({ key: 'hidden:' + b.key, emoji: b.emoji, name: b.name });
+  });
+  (lifetimeTitles[name] || []).forEach((t, i) => {
+    list.push({ key: 'title:' + i + ':' + t.awardedAt, emoji: t.emoji, name: t.label });
+  });
+  return list;
+}
+
+// 대표 배지 설정/해제
+async function setRepresentativeBadge(name, key, emoji, badgeName) {
+  if (key) {
+    representativeBadges[name] = { key, emoji, name: badgeName };
+    await dbPut("representativeBadges/" + encodeURIComponent(name), representativeBadges[name]);
+  } else {
+    delete representativeBadges[name];
+    await dbDelete("representativeBadges/" + encodeURIComponent(name));
+  }
+  render();
+}
+
+
 function openBadgeCollection() {
   const targetName = view !== "all" ? view : (members[0] && members[0].name) || "";
   const m = document.getElementById("modal");
@@ -2877,6 +2930,39 @@ function openBadgeCollection() {
       html += '<button onclick="closeModal();view=\'' + esc(mb.name) + '\';openBadgeCollection()" style="' + (mb.name === targetName ? 'border-color:var(--accent);background:var(--accent-soft);color:var(--accent)' : '') + '"><span class="d" style="background:' + colorOf(mb.name) + '"></span>' + esc(mb.name) + '</button>';
     });
     html += '</div>';
+  }
+
+  // 대표 배지 선택
+  if (targetName) {
+    const achieved = getAllAchievedBadges(targetName);
+    const current = representativeBadges[targetName];
+    html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🎖️ 대표 배지</div>';
+    if (achieved.length === 0) {
+      html += '<div style="font-size:12px;color:var(--faint);margin-bottom:18px">아직 획득한 배지가 없어요.</div>';
+    } else {
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px">';
+      achieved.forEach(b => {
+        const active = current && current.key === b.key;
+        html += '<button onclick="setRepresentativeBadge(\'' + esc(targetName) + '\',\'' + b.key + '\',\'' + b.emoji + '\',\'' + esc(b.name) + '\');closeModal();openBadgeCollection()" style="border:1.5px solid ' + (active ? 'var(--accent)' : 'var(--line)') + ';background:' + (active ? 'var(--accent-soft)' : 'var(--surface)') + ';color:' + (active ? 'var(--accent)' : 'var(--ink)') + ';border-radius:99px;padding:7px 14px;font-size:13px;font-weight:700">' + b.emoji + ' ' + esc(b.name) + (active ? ' ✓' : '') + '</button>';
+      });
+      if (current) {
+        html += '<button onclick="setRepresentativeBadge(\'' + esc(targetName) + '\',null,\'\',\'\');closeModal();openBadgeCollection()" style="border:1.5px dashed var(--faint);background:transparent;color:var(--muted);border-radius:99px;padding:7px 14px;font-size:13px;font-weight:700">해제</button>';
+      }
+      html += '</div>';
+    }
+  }
+
+  // 시즌 타이틀 (영구 보관)
+  if (targetName) {
+    const titles = lifetimeTitles[targetName] || [];
+    if (titles.length > 0) {
+      html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">🏆 시즌 타이틀</div>';
+      html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">';
+      titles.slice().reverse().forEach(t => {
+        html += '<span style="border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700">' + t.emoji + ' ' + esc(t.label) + '</span>';
+      });
+      html += '</div>';
+    }
   }
 
   html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">✨ 평생 배지</div>';
@@ -3343,6 +3429,43 @@ async function endSeason(goalResults = {}) {
   })).sort((a,b) => b.days - a.days);
   if (recordData.length && recordData[0].days > 0) hall.record = { name: recordData[0].name, days: recordData[0].days };
 
+  // 먹방왕 (시즌 전체 칼로리 총합 1위)
+  const mukbangData = members.map(m => {
+    const kcal = entries.filter(e => e.member === m.name).reduce((s,e) => s + e.calories, 0);
+    return { name: m.name, kcal };
+  }).filter(m => m.kcal > 0).sort((a,b) => b.kcal - a.kcal);
+  if (mukbangData.length) hall.mukbangKing = { name: mukbangData[0].name, kcal: mukbangData[0].kcal };
+
+  // 운동왕 (시즌 전체 운동 소모 총합 1위)
+  const exerciseKingData = members.map(m => {
+    const burned = exercises.filter(e => e.member === m.name).reduce((s,e) => s + e.burned, 0);
+    return { name: m.name, burned };
+  }).filter(m => m.burned > 0).sort((a,b) => b.burned - a.burned);
+  if (exerciseKingData.length) hall.exerciseKing = { name: exerciseKingData[0].name, burned: exerciseKingData[0].burned };
+
+  // 건강왕 (시즌 전체 건강 점수 합산 1위, 신체정보 설정한 멤버만)
+  const healthKingData = members.map(m => {
+    const profile = getMyProfile(m.name);
+    if (!profile) return null;
+    const tdee = calcTDEE(profile);
+    const mEntries = entries.filter(e => e.member === m.name);
+    const recordDaysList = [...new Set(mEntries.map(e => e.date))];
+    let score = 0;
+    recordDaysList.forEach(d => {
+      const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
+      if (!dayKcal) return;
+      const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
+      const pct = (dayKcal - dayBurned) / tdee * 100;
+      if (pct >= 80 && pct <= 110) score += 10;
+      else if (pct >= 70) score += 7;
+      else if (pct <= 130) score += 5;
+      else score += 2;
+      if (dayBurned > 0) score += 3;
+    });
+    return { name: m.name, score };
+  }).filter(Boolean).filter(m => m.score > 0).sort((a,b) => b.score - a.score);
+  if (healthKingData.length) hall.healthKing = { name: healthKingData[0].name, score: healthKingData[0].score };
+
   // 시즌 목표 성공/실패
   const goalSummary = members.map(m => ({
     name: m.name,
@@ -3372,6 +3495,16 @@ async function endSeason(goalResults = {}) {
     const participated = entries.some(e => e.member === m.name);
     if (participated) await bumpLifetimeStat(m.name, "seasonsCount", 1);
   }
+
+  // 시즌 배지를 평생 타이틀로 전환 (영구 보관)
+  const seasonLabel = currentSeasonId === "default"
+    ? "시즌 1"
+    : (seasons[currentSeasonId] ? seasons[currentSeasonId].name : "시즌");
+  if (hall.mvp) await grantLifetimeTitle(hall.mvp.name, '👑', seasonLabel + ' MVP');
+  if (hall.streak) await grantLifetimeTitle(hall.streak.name, '🔥', seasonLabel + ' 최장 스트릭');
+  if (hall.mukbangKing) await grantLifetimeTitle(hall.mukbangKing.name, '🍽️', seasonLabel + ' 먹방왕');
+  if (hall.exerciseKing) await grantLifetimeTitle(hall.exerciseKing.name, '💪', seasonLabel + ' 운동왕');
+  if (hall.healthKing) await grantLifetimeTitle(hall.healthKing.name, '🥗', seasonLabel + ' 건강왕');
 
   await loadAll(); render();
 }
@@ -4548,7 +4681,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge });
 
 start();
 </script>
