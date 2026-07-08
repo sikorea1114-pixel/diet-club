@@ -3119,26 +3119,34 @@ function openBadgeCollection() {
     }
   }
 
-  // 🎖️ 이번 시즌 배지 (진행 중, 실시간 1등, 시즌 종료 시 회수)
+  // 🎖️ 이번 시즌 배지 (5개 부문 전체 표시 — 도감 형태, 실시간 1등 보유, 시즌 종료 시 회수)
   if (targetName) {
-    const seasonBadges = getCurrentSeasonBadgesFor(targetName);
+    const leaders = getCurrentSeasonLeaders();
+    const seasonOrder = [
+      { key: 'mvp', emoji: '👑', label: 'MVP' },
+      { key: 'mukbang', emoji: '🍽️', label: '먹방왕' },
+      { key: 'exercise', emoji: '💪', label: '운동왕' },
+      { key: 'health', emoji: '🥗', label: '건강왕' },
+      { key: 'streak', emoji: '🔥', label: '최장 스트릭' }
+    ];
     html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:2px">🎖️ 이번 시즌 배지</div>';
-    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:10px">지금 1등인 부문만 표시돼요 · 시즌 종료 시 회수되고 지난 시즌 타이틀로 전환돼요</div>';
-    if (seasonBadges.length === 0) {
-      html += '<div style="font-size:12px;color:var(--faint);margin-bottom:20px">현재 1등인 부문이 없어요.</div>';
-    } else {
-      html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">';
-      seasonBadges.forEach(b => {
-        html += '<div style="padding:14px;border-radius:14px;background:var(--accent-soft);border:1px solid var(--accent)">';
-        html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
-          '<span style="font-size:20px">' + b.emoji + '</span>' +
-          '<span style="font-size:14px;font-weight:800">' + esc(b.label) + '</span>' +
-          '<span style="font-size:11px;color:var(--accent);font-weight:700;margin-left:auto">보유중</span></div>';
-        html += '<div style="font-size:12px;color:var(--muted)">' + esc(b.desc) + '</div>';
-        html += '</div>';
-      });
+    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:10px">지금 1등인 사람에게 실시간으로 부여돼요 · 시즌 종료 시 지난 시즌 타이틀로 전환돼요</div>';
+    html += '<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">';
+    seasonOrder.forEach(o => {
+      const cur = leaders[o.key];
+      const isMine = cur && cur.name === targetName;
+      html += '<div style="padding:14px;border-radius:14px;background:' + (isMine ? 'var(--accent-soft)' : 'var(--bg)') + ';border:1px solid ' + (isMine ? 'var(--accent)' : 'var(--line)') + '">';
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+        '<span style="font-size:20px">' + (cur ? o.emoji : '🔒') + '</span>' +
+        '<span style="font-size:14px;font-weight:800">' + o.label + '</span>';
+      if (isMine) html += '<span style="font-size:11px;color:var(--accent);font-weight:700;margin-left:auto">보유중</span>';
+      else if (cur) html += '<span style="font-size:11px;color:var(--muted);font-weight:700;margin-left:auto">👑 ' + esc(cur.name) + '</span>';
+      else html += '<span style="font-size:11px;color:var(--faint);margin-left:auto">아직 없음</span>';
       html += '</div>';
-    }
+      html += '<div style="font-size:12px;color:var(--muted)">' + (cur ? esc(cur.desc) : '아직 조건을 충족한 사람이 없어요') + '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
   }
 
   html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">✨ 평생 배지</div>';
