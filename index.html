@@ -1115,6 +1115,7 @@ async function doSignup() {
 
 async function doLogout() {
   if (!confirm("로그아웃할까요?")) return;
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   await auth.signOut();
 }
 
@@ -1129,6 +1130,7 @@ async function start() {
   }
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
+    if (!currentUser) { clearInterval(pollTimer); pollTimer = null; return; } // 로그아웃 상태면 폴링 중단
     if (document.getElementById("modal").innerHTML) return;
     if (document.activeElement && document.activeElement.id === "pledge-input") return;
     if (document.activeElement && document.activeElement.id === "ex-type") return;
@@ -5035,6 +5037,7 @@ auth.onAuthStateChanged(async (user) => {
   } else {
     currentUser = null;
     myName = "";
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } // 안전장치
     await preloadMembersForAuthScreen();
     renderLoginScreen();
   }
