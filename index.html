@@ -595,7 +595,7 @@ function render() {
   html += '</header>';
 
   // 합계 카드 + 스트릭/MVP (투표/공지 모드 제외)
-  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome) {
+  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome && !isBoard) {
 
     // 합계 카드
     html += '<div class="card" style="margin-top:12px">';
@@ -685,7 +685,7 @@ function render() {
   // 리스트 (투표/공지 모드 제외)
   if (isHome) {
     html += renderHomeHtml(dayKey, dayEntries, dayExercises, wr);
-  } else if (!isVote && !isNotice && !isMukbang && !isAI) {
+  } else if (!isVote && !isNotice && !isMukbang && !isAI && !isBoard) {
     html += '<div class="list">';
     if (!loaded) {
       html += '<div class="empty">불러오는 중…</div>';
@@ -817,9 +817,9 @@ function render() {
 
   // 플로팅 버튼 (오늘 날짜에서만 기록 가능)
   const isTodayView = fmtKey(date) === fmtKey(new Date());
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && isTodayView) html += '<button class="fab" style="bottom:calc(136px + env(safe-area-inset-bottom))" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
-  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && isTodayView) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
-  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && !isTodayView && (isRecord || isWeek || isMonth)) html += '<div style="position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:14px 24px;font-size:12px;font-weight:700;color:var(--muted)">📌 오늘 날짜에서만 기록할 수 있어요</div>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isBoard && !isReadOnly && isTodayView) html += '<button class="fab" style="bottom:calc(136px + env(safe-area-inset-bottom))" onclick="openAdd()">' + iconPlus(20) + ' 먹은 거 적기</button>';
+  if (members.length && !isVote && !isNotice && !isMukbang && !isAI && !isHome && !isBoard && !isReadOnly && isTodayView) html += '<button class="fab" onclick="openExercise()">' + iconPlus(20) + ' 운동 기록하기</button>';
+  if (!isVote && !isNotice && !isMukbang && !isAI && !isHome && !isBoard && !isReadOnly && !isTodayView && (isRecord || isWeek || isMonth)) html += '<div style="position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:14px 24px;font-size:12px;font-weight:700;color:var(--muted)">📌 오늘 날짜에서만 기록할 수 있어요</div>';
   if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
   if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
   if (isBoard && !isReadOnly) html += '<button class="fab" onclick="openNewBoardPost()">' + iconPlus(20) + ' 건의하기</button>';
@@ -4852,7 +4852,7 @@ function boardAuthorLabel(authorName) {
 function renderBoardHtml() {
   const list = Object.values(board).sort((a,b) => b.createdAt - a.createdAt);
   let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
-  html += '<div style="font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px;line-height:1.5">💡 업데이트 아이디어, 불편한 점, 하고 싶은 말을 자유롭게 남겨주세요. 작성자는 이성호에게만 보여요.</div>';
+  html += '<div style="font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px;line-height:1.5">💡 업데이트 아이디어, 불편한 점, 하고 싶은 말을 자유롭게 남겨주세요. 익명으로 등록돼요.</div>';
   if (list.length === 0) {
     html += '<div class="empty">아직 건의된 내용이 없어요.<br>아래 + 버튼으로 자유롭게 남겨보세요!</div>';
   } else {
@@ -4878,7 +4878,7 @@ function openNewBoardPost() {
   const m = document.getElementById("modal");
   m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
     '<div class="phead"><h2>💡 건의하기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">다른 사람에게는 익명으로 보여요. 이성호에게만 작성자가 보여요.</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">다른 사람에게는 익명으로 보여요.</div>' +
     '<textarea class="ti" id="board-content" rows="6" style="resize:none" placeholder="업데이트해줬으면 하는 것, 불편한 점 등을 자유롭게 적어주세요"></textarea>' +
     '<button class="save" id="board-save" onclick="submitNewBoardPost()" disabled>' + iconCheck() + ' 익명으로 등록하기</button>' +
     '</div></div>';
