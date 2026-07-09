@@ -404,6 +404,7 @@ async function loadAll() {
 
 // ── 액션 ──
 async function addMember(name) {
+  if (myName !== "이성호") { alert("이성호만 멤버를 추가할 수 있어요!"); return; }
   const t = name.trim();
   if (!t || members.some(m => m.name === t)) return;
   members = [...members, { name: t }];
@@ -663,7 +664,7 @@ function render() {
     html += '<button class="chip ' + (view===m.name?"on":"") + '" onclick="setView(\'' + esc(m.name).replace(/'/g,"\\'") + '\')">' +
       repBadge + '<span class="dot" style="background:' + colorOf(m.name) + '"></span>' + esc(m.name) + streakBadge + '</button>';
   });
-  html += '<button class="chip add" onclick="openMember()">' + iconPlus(15) + ' 멤버</button>';
+  if (myName === "이성호") html += '<button class="chip add" onclick="openMember()">' + iconPlus(15) + ' 멤버</button>';
   html += '</div>';
 
   // 리스트 (투표/공지 모드 제외)
@@ -674,7 +675,7 @@ function render() {
     if (!loaded) {
       html += '<div class="empty">불러오는 중…</div>';
     } else if (members.length === 0) {
-      html += '<div class="empty">먼저 함께할 멤버를 추가해보세요.<br><button class="link" onclick="openMember()">+ 멤버 추가하기</button></div>';
+      html += '<div class="empty">먼저 함께할 멤버를 추가해보세요.' + (myName === "이성호" ? '<br><button class="link" onclick="openMember()">+ 멤버 추가하기</button>' : '<br><span style="color:var(--faint)">이성호님만 멤버를 추가할 수 있어요</span>') + '</div>';
     } else if (isMonth) {
       if (monthGroups.length === 0) html += '<div class="empty">이번 달 기록이 없어요.</div>';
       else monthGroups.forEach(g => {
@@ -912,6 +913,7 @@ function submitAdd() {
 
 // ── 멤버 추가 팝업 ──
 function openMember() {
+  if (myName !== "이성호") { alert("이성호만 멤버를 관리할 수 있어요!"); return; }
   const m = document.getElementById("modal");
   let memberList = '';
   if (members.length > 0) {
@@ -940,6 +942,7 @@ function openMember() {
 }
 
 async function deleteMember(name) {
+  if (myName !== "이성호") { alert("이성호만 멤버를 삭제할 수 있어요!"); return; }
   if (!confirm(name + " 님을 삭제할까요?\n해당 멤버의 기록은 유지돼요.")) return;
   members = members.filter(m => m.name !== name);
   if (view === name) view = "all";
