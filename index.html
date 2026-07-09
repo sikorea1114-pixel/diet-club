@@ -242,6 +242,7 @@ let members = [];
 let entries = [];
 let polls = {};
 let notices = {};
+let board = {}; // 익명 건의함
 let seasons = {};
 let currentSeasonId = "default";
 let date = new Date();
@@ -357,7 +358,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -376,12 +377,14 @@ async function loadAll() {
     dbGet("firstAchievers"),
     dbGet("representativeBadges"),
     dbGet("lifetimeTitles"),
-    dbGet("badgeLog/" + fmtKey(new Date()))
+    dbGet("badgeLog/" + fmtKey(new Date())),
+    dbGet(seasonPath("board"))
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
   polls = p || {};
   notices = n || {};
+  board = bd || {};
   seasons = s || {};
   pledges = pl || {};
   meetDate = md || "";
@@ -413,6 +416,7 @@ async function addMember(name) {
   render();
 }
 async function addEntry(member, food, calories) {
+  if (member !== myName) { alert("본인 기록만 남길 수 있어요!"); return; }
   if (fmtKey(date) !== fmtKey(new Date())) {
     alert("오늘 날짜에서만 기록할 수 있어요!");
     return;
@@ -431,6 +435,7 @@ async function addEntry(member, food, calories) {
 }
 async function removeEntry(id) {
   const target = entries.find(e => e.id === id);
+  if (target && target.member !== myName && myName !== "이성호") { alert("본인 기록만 삭제할 수 있어요!"); return; }
   entries = entries.filter(e => e.id !== id);
   render();
   await dbDelete(seasonPath("entries") + "/" + id);
@@ -481,7 +486,8 @@ function render() {
   const isNotice = mode === "notice";
   const isMukbang = mode === "mukbang" || mode === "history";
   const isAI = mode === "ai";
-  const isCommunity = isVote || isNotice || isMukbang || isAI;
+  const isBoard = mode === "board";
+  const isCommunity = isVote || isNotice || isMukbang || isAI || isBoard;
   const isRecord = !isCommunity && !isHome;
   const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
 
@@ -492,7 +498,8 @@ function render() {
     const d = new Date(p.createdAt);
     return fmtKey(d) === todayKey;
   });
-  const hasNewCommunity = (hasNewNotice && !isNotice) || (hasNewPoll && !isVote);
+  const hasNewBoard = Object.values(board).some(b => fmtKey(new Date(b.createdAt)) === todayKey);
+  const hasNewCommunity = (hasNewNotice && !isNotice) || (hasNewPoll && !isVote) || (hasNewBoard && !isBoard);
   const wr = getWeekRange(date);
   const weekEntries = entries.filter(e => {
     return e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) &&
@@ -554,7 +561,8 @@ function render() {
       '<button onclick="setMode(\'month\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="month"?"var(--accent)":"var(--line)") + ';background:' + (mode==="month"?"var(--accent-soft)":"transparent") + ';color:' + (mode==="month"?"var(--accent)":"var(--muted)") + ';font-size:13px;font-weight:700">월별</button>' +
       '</div>';
   } else {
-    html += '<div style="display:flex;gap:6px;padding:12px 16px 0">' +
+    html += '<div style="display:flex;flex-direction:column;gap:6px;padding:12px 16px 0">' +
+      '<div style="display:flex;gap:6px">' +
       '<button onclick="setMode(\'notice\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="notice"?"var(--ink)":"var(--line)") + ';background:' + (mode==="notice"?"var(--ink)":"transparent") + ';color:' + (mode==="notice"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">📌 공지' +
       (hasNewNotice && mode !== "notice" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
@@ -562,7 +570,14 @@ function render() {
       '<button onclick="setMode(\'vote\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="vote"?"var(--ink)":"var(--line)") + ';background:' + (mode==="vote"?"var(--ink)":"transparent") + ';color:' + (mode==="vote"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">🗳️ 투표' +
       (hasNewPoll && mode !== "vote" ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
       '</button>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px">' +
       '<button onclick="setMode(\'ai\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (mode==="ai"?"var(--ink)":"var(--line)") + ';background:' + (mode==="ai"?"var(--ink)":"transparent") + ';color:' + (mode==="ai"?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700">🤖 AI</button>' +
+      '<button onclick="setMode(\'board\')" style="flex:1;padding:8px;border-radius:10px;border:1px solid ' + (isBoard?"var(--ink)":"var(--line)") + ';background:' + (isBoard?"var(--ink)":"transparent") + ';color:' + (isBoard?"#fff":"var(--muted)") + ';font-size:13px;font-weight:700;position:relative">💡 건의함' +
+      (hasNewBoard && !isBoard ? '<span style="position:absolute;top:2px;right:2px;width:7px;height:7px;background:#E0726A;border-radius:99px;border:1.5px solid var(--surface)"></span>' : '') +
+      '</button>' +
+      '<div style="flex:1"></div>' +
+      '</div>' +
       '</div>';
   }
 
@@ -794,6 +809,8 @@ function render() {
     }
   } else if (isAI) {
     html += renderAIHtml();
+  } else if (isBoard) {
+    html += renderBoardHtml();
   }
 
   html += '</div>';
@@ -805,6 +822,7 @@ function render() {
   if (!isVote && !isNotice && !isMukbang && !isAI && !isHome && !isReadOnly && !isTodayView && (isRecord || isWeek || isMonth)) html += '<div style="position:fixed;bottom:calc(72px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:14px 24px;font-size:12px;font-weight:700;color:var(--muted)">📌 오늘 날짜에서만 기록할 수 있어요</div>';
   if (isVote && !isReadOnly) html += '<button class="fab" onclick="openNewPoll()">' + iconPlus(20) + ' 투표 만들기</button>';
   if (isNotice && !isReadOnly) html += '<button class="fab" onclick="openNewNotice()">' + iconPlus(20) + ' 글 쓰기</button>';
+  if (isBoard && !isReadOnly) html += '<button class="fab" onclick="openNewBoardPost()">' + iconPlus(20) + ' 건의하기</button>';
   if (isReadOnly) html += '<div style="position:fixed;bottom:calc(62px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:12px 20px;font-size:13px;font-weight:700;color:var(--muted)">📁 종료된 시즌 — 읽기 전용</div>';
 
   app.innerHTML = html;
@@ -816,39 +834,36 @@ function render() {
 
 function exerciseCard(e) {
   const c = colorOf(e.member);
+  const canEdit = e.member === myName || myName === "이성호";
   return '<div class="entry">' +
     '<span class="ava" style="background:#4CAF5022;color:#4CAF50">🏃</span>' +
     '<div class="mid"><div class="food">' + esc(e.type) + ' ' + e.minutes + '분</div>' +
     '<div class="meta">' + esc(e.member) + ' · ' + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum" style="color:#4CAF50">-' + e.burned.toLocaleString() + '<small> kcal</small></span>' +
-    '<button class="del" onclick="event.stopPropagation();openEditExercise(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
-    '<button class="del" onclick="removeExercise(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
+    (canEdit ? '<button class="del" onclick="event.stopPropagation();openEditExercise(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
+    '<button class="del" onclick="removeExercise(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button>' : '') + '</div>';
 }
 
 function entryCard(e) {
   const c = colorOf(e.member);
+  const canEdit = e.member === myName || myName === "이성호";
   return '<div class="entry" onclick="toggleEntry(this)">' +
     '<span class="ava" style="background:' + c + '22;color:' + c + '">' + esc(avatarOf(e.member)) + '</span>' +
     '<div class="mid"><div class="food">' + esc(e.food) + '</div><div class="meta">' + (e.mealType ? e.mealType + ' · ' : '') + esc(e.member) + ' · ' + (fmtKey(new Date(e.timestamp)) !== e.date ? '<span style="color:#E0726A">당일 기록 아님</span> · ' : '') + fmtTime(e.timestamp) + '</div></div>' +
     '<span class="kc tnum">' + e.calories.toLocaleString() + '<small> kcal</small></span>' +
-    '<button class="del" onclick="event.stopPropagation();openEditEntry(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
-    '<button class="del" onclick="event.stopPropagation();removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button></div>';
+    (canEdit ? '<button class="del" onclick="event.stopPropagation();openEditEntry(\'' + e.id + '\')" aria-label="수정" style="color:var(--muted)">' + iconEdit() + '</button>' +
+    '<button class="del" onclick="event.stopPropagation();removeEntry(\'' + e.id + '\')" aria-label="삭제">' + iconTrash() + '</button>' : '') + '</div>';
 }
 
 // ── 입력 팝업 ──
 let addMemberSel = "";
 let mealTypeSel = "아침";
 function openAdd() {
-  addMemberSel = view === "all" ? (members[0] && members[0].name) : view;
+  addMemberSel = myName;
   const m = document.getElementById("modal");
-  let mp = '<div class="mpick noscroll">';
-  members.forEach(mm => {
-    const sel = mm.name === addMemberSel;
-    mp += '<button onclick="pickMember(\'' + esc(mm.name).replace(/'/g,"\\'") + '\')" style="' +
-      (sel ? 'border-color:' + colorOf(mm.name) + ';background:' + colorOf(mm.name) + '1A;color:var(--ink)' : '') + '" data-m="' + esc(mm.name) + '">' +
-      '<span class="d" style="background:' + colorOf(mm.name) + '"></span>' + esc(mm.name) + '</button>';
-  });
-  mp += '</div>';
+  let mp = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;background:var(--bg);border-radius:12px">' +
+    '<span class="d" style="width:8px;height:8px;border-radius:99px;background:' + colorOf(myName) + '"></span>' +
+    '<span style="font-size:13px;font-weight:700;color:var(--muted)">나: ' + esc(myName) + '</span></div>';
   m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
     '<div class="phead"><h2>먹은 거 적기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
     mp +
@@ -1164,6 +1179,7 @@ function iconEdit() { return '<span style="display:flex;color:var(--muted)">' + 
 function openEditEntry(id) {
   const entry = entries.find(e => e.id === id);
   if (!entry) return;
+  if (entry.member !== myName && myName !== "이성호") { alert("본인 기록만 수정할 수 있어요!"); return; }
   const m = document.getElementById("modal");
   const meals = ["아침","점심","저녁","간식"];
   m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
@@ -1195,13 +1211,14 @@ function pickEditMeal(meal) {
 }
 
 async function submitEditEntry(id) {
+  const idx = entries.findIndex(e => e.id === id);
+  if (idx === -1) return;
+  if (entries[idx].member !== myName && myName !== "이성호") { alert("본인 기록만 수정할 수 있어요!"); return; }
   const food = document.getElementById("edit-food").value.trim();
   if (!food) return;
   const raw = parseInt(document.getElementById("edit-kcal").value, 10);
   const calories = isNaN(raw) || raw < 0 ? 0 : raw;
   const mealType = window._editMeal || "아침";
-  const idx = entries.findIndex(e => e.id === id);
-  if (idx === -1) return;
   entries[idx] = { ...entries[idx], food, calories, mealType };
   await dbPut(seasonPath("entries") + "/" + id + "/food", food);
   await dbPut(seasonPath("entries") + "/" + id + "/calories", calories);
@@ -3428,16 +3445,11 @@ function submitMyProfile(name) {
 }
 
 function openExercise() {
-  addMemberSel = view === "all" ? (members[0] && members[0].name) : view;
+  addMemberSel = myName;
   const m = document.getElementById("modal");
-  let mp = '<div class="mpick noscroll">';
-  members.forEach(mm => {
-    const sel = mm.name === addMemberSel;
-    mp += '<button onclick="pickMember(\'' + esc(mm.name).replace(/'/g,"\\\'") + '\')" style="' +
-      (sel ? 'border-color:' + colorOf(mm.name) + ';background:' + colorOf(mm.name) + '1A' : '') + '" data-m="' + esc(mm.name) + '">' +
-      '<span class="d" style="background:' + colorOf(mm.name) + '"></span>' + esc(mm.name) + '</button>';
-  });
-  mp += '</div>';
+  let mp = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;background:var(--bg);border-radius:12px">' +
+    '<span class="d" style="width:8px;height:8px;border-radius:99px;background:' + colorOf(myName) + '"></span>' +
+    '<span style="font-size:13px;font-weight:700;color:var(--muted)">나: ' + esc(myName) + '</span></div>';
 
   const cats = [...new Set(EXERCISE_DB.map(e => e.cat))];
   const opts = cats.map(cat => {
@@ -3496,8 +3508,8 @@ function openExercise() {
 }
 
 async function submitExercise() {
-  const name = addMemberSel || (view !== "all" ? view : members[0]?.name);
-  if (!name) { alert("이름을 선택해주세요!"); return; }
+  const name = myName;
+  if (!name) { alert("로그인 후 이용해주세요."); return; }
   const mins = parseInt(document.getElementById("ex-min").value) || 0;
   if (!mins) { alert("시간을 입력해주세요!"); return; }
   const weight = parseFloat(document.getElementById("ex-weight").value) || 60;
@@ -3517,6 +3529,7 @@ async function submitExercise() {
 
 async function removeExercise(id) {
   const target = exercises.find(e => e.id === id);
+  if (target && target.member !== myName && myName !== "이성호") { alert("본인 운동 기록만 삭제할 수 있어요!"); return; }
   exercises = exercises.filter(e => e.id !== id);
   await dbDelete(seasonPath("exercises") + "/" + id);
   await loadAll(); render();
@@ -3526,6 +3539,7 @@ async function removeExercise(id) {
 function openEditExercise(id) {
   const ex = exercises.find(e => e.id === id);
   if (!ex) return;
+  if (ex.member !== myName && myName !== "이성호") { alert("본인 운동 기록만 수정할 수 있어요!"); return; }
   const m = document.getElementById("modal");
   const cats = [...new Set(EXERCISE_DB.map(e => e.cat))];
   const opts = cats.map(cat => {
@@ -3571,6 +3585,8 @@ function openEditExercise(id) {
 }
 
 async function submitEditExercise(id) {
+  const targetEx = exercises.find(e => e.id === id);
+  if (targetEx && targetEx.member !== myName && myName !== "이성호") { alert("본인 운동 기록만 수정할 수 있어요!"); return; }
   const mins = parseInt(document.getElementById("edit-ex-min").value) || 0;
   if (!mins) { alert("시간을 입력해주세요!"); return; }
   const weight = parseFloat(document.getElementById("edit-ex-weight").value) || 60;
@@ -4113,10 +4129,10 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
       html += '</div>';
     });
     html += '</div>';
-    const myPledge = view !== "all" ? (pledges[view] || "") : "";
+    const myPledge = myName ? (pledges[myName] || "") : "";
     html += '<div style="display:flex;gap:8px;margin-top:12px">' +
-      '<input class="ti" id="pledge-input" placeholder="' + (view === "all" ? "이름 선택 후 목표 입력" : "이번 시즌 목표를 입력하세요") + '" value="' + esc(myPledge) + '" ' + (view === "all" ? "disabled " : "") + 'style="flex:1;margin:0" />' +
-      '<button onclick="submitPledge()" ' + (view === "all" ? "disabled " : "") + 'style="padding:0 16px;border-radius:12px;border:none;background:' + (view === "all" ? "var(--faint)" : "var(--accent)") + ';color:#fff;font-size:13px;font-weight:800">저장</button>' +
+      '<input class="ti" id="pledge-input" placeholder="내 시즌 목표를 입력하세요" value="' + esc(myPledge) + '" style="flex:1;margin:0" />' +
+      '<button onclick="submitPledge()" style="padding:0 16px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:800">저장</button>' +
       '</div>';
     html += '</div>';
   }
@@ -4808,13 +4824,13 @@ async function submitNewNotice() {
 }
 
 async function submitPledge() {
-  if (view === "all") { alert("이름을 먼저 선택해주세요!"); return; }
+  if (!myName) { alert("로그인 후 이용해주세요."); return; }
   const text = document.getElementById("pledge-input").value.trim();
-  pledges[view] = text;
+  pledges[myName] = text;
   if (text) {
-    await dbPut(seasonPath("pledges/" + view), text);
+    await dbPut(seasonPath("pledges/" + myName), text);
   } else {
-    await dbDelete(seasonPath("pledges/" + view));
+    await dbDelete(seasonPath("pledges/" + myName));
   }
   await loadAll(); render();
 }
@@ -4823,6 +4839,76 @@ async function deleteNotice(id) {
   if (!confirm("이 글을 삭제할까요?")) return;
   delete notices[id];
   await dbDelete(seasonPath("notices") + "/" + id);
+  await loadAll(); render();
+}
+
+// ── 익명 건의함 ──
+function boardAuthorLabel(authorName) {
+  if (myName === "이성호") return esc(authorName) + ' <span style="color:var(--faint);font-weight:600">(익명)</span>';
+  if (authorName === myName) return '익명 <span style="color:var(--faint);font-weight:600">(나)</span>';
+  return '익명';
+}
+
+function renderBoardHtml() {
+  const list = Object.values(board).sort((a,b) => b.createdAt - a.createdAt);
+  let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
+  html += '<div style="font-size:12px;color:var(--muted);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px;line-height:1.5">💡 업데이트 아이디어, 불편한 점, 하고 싶은 말을 자유롭게 남겨주세요. 작성자는 이성호에게만 보여요.</div>';
+  if (list.length === 0) {
+    html += '<div class="empty">아직 건의된 내용이 없어요.<br>아래 + 버튼으로 자유롭게 남겨보세요!</div>';
+  } else {
+    list.forEach(post => {
+      html += '<div class="card" style="margin:0 0 14px">';
+      html += '<div style="font-size:14px;color:var(--ink);line-height:1.6;margin-bottom:10px;white-space:pre-wrap">' + esc(post.content) + '</div>';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<div style="font-size:12px;color:var(--muted);font-weight:600">' +
+        boardAuthorLabel(post.author) + ' · ' + fmtDateHeader(post.date) + ' ' + fmtTime(post.createdAt) +
+        (post.date === fmtKey(new Date()) ? ' <span style="color:#E0726A;font-weight:800">NEW</span>' : '') +
+        '</div>';
+      if (myName === "이성호" || post.author === myName) {
+        html += '<button onclick="deleteBoardPost(\'' + post.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px">삭제</button>';
+      }
+      html += '</div></div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+function openNewBoardPost() {
+  const m = document.getElementById("modal");
+  m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
+    '<div class="phead"><h2>💡 건의하기</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:12px">다른 사람에게는 익명으로 보여요. 이성호에게만 작성자가 보여요.</div>' +
+    '<textarea class="ti" id="board-content" rows="6" style="resize:none" placeholder="업데이트해줬으면 하는 것, 불편한 점 등을 자유롭게 적어주세요"></textarea>' +
+    '<button class="save" id="board-save" onclick="submitNewBoardPost()" disabled>' + iconCheck() + ' 익명으로 등록하기</button>' +
+    '</div></div>';
+  const t = document.getElementById("board-content");
+  const upd = () => { document.getElementById("board-save").disabled = !t.value.trim(); };
+  t.addEventListener("input", upd);
+  setTimeout(() => t.focus(), 250);
+}
+
+async function submitNewBoardPost() {
+  const content = document.getElementById("board-content").value.trim();
+  if (!content) return;
+  if (!myName) { alert("로그인 후 이용해주세요."); return; }
+  const btn = document.getElementById("board-save");
+  btn.disabled = true;
+  const id = "board-" + Date.now();
+  const post = { id, content, author: myName, date: fmtKey(new Date()), createdAt: Date.now() };
+  board[id] = post;
+  await dbPut(seasonPath("board") + "/" + id, post);
+  closeModal();
+  await loadAll(); render();
+}
+
+async function deleteBoardPost(id) {
+  const post = board[id];
+  if (!post) return;
+  if (myName !== "이성호" && post.author !== myName) { alert("본인이 쓴 글만 삭제할 수 있어요."); return; }
+  if (!confirm("이 글을 삭제할까요?")) return;
+  delete board[id];
+  await dbDelete(seasonPath("board") + "/" + id);
   await loadAll(); render();
 }
 
@@ -5018,7 +5104,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
