@@ -1058,7 +1058,8 @@ function copyInvite() {
 // ══════════ 로그인 / 가입 ══════════
 
 function deriveNameFromEmail(email) {
-  return decodeURIComponent(email.split("@")[0]);
+  const local = email.split("@")[0];
+  try { return decodeURIComponent(local); } catch (e) { return local; } // 이전에 인코딩된 계정도 호환
 }
 
 function renderLoginScreen() {
@@ -1105,7 +1106,7 @@ async function doLogin() {
   const errEl = document.getElementById("login-error");
   errEl.style.display = "none";
   if (!name || !pw) { errEl.textContent = "이름과 비밀번호를 입력해주세요."; errEl.style.display = "block"; return; }
-  const email = encodeURIComponent(name) + AUTH_DOMAIN_SUFFIX;
+  const email = name + AUTH_DOMAIN_SUFFIX;
   try {
     await auth.signInWithEmailAndPassword(email, pw);
   } catch (e) {
@@ -1121,7 +1122,7 @@ async function doSignup() {
   errEl.style.display = "none";
   if (!name) { errEl.textContent = "이름을 선택해주세요."; errEl.style.display = "block"; return; }
   if (!pw || pw.length < 6) { errEl.textContent = "비밀번호는 6자 이상이어야 해요."; errEl.style.display = "block"; return; }
-  const email = encodeURIComponent(name) + AUTH_DOMAIN_SUFFIX;
+  const email = name + AUTH_DOMAIN_SUFFIX;
   try {
     await auth.createUserWithEmailAndPassword(email, pw);
   } catch (e) {
