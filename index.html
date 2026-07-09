@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title> 🏃🏻🏃‍♀️</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root {
     --bg: #F2F4F6; --surface: #FFFFFF; --ink: #191F28; --muted: #8B95A1;
@@ -217,6 +219,22 @@
 const MEMBER_COLORS = ["#FF8A65","#4FC3F7","#BA68C8","#FFB74D","#4DB6AC","#F06292","#9575CD","#AED581"];
 const WEEK = ["일","월","화","수","목","금","토"];
 
+// ── Firebase Auth 초기화 ──
+const firebaseConfig = {
+  apiKey: "AIzaSyAYcXoAE2TZOQd21PMraWry-Ie9neznTZw",
+  authDomain: "diet-cae5a.firebaseapp.com",
+  databaseURL: "https://diet-cae5a-default-rtdb.firebaseio.com",
+  projectId: "diet-cae5a",
+  storageBucket: "diet-cae5a.firebasestorage.app",
+  messagingSenderId: "79935198998",
+  appId: "1:79935198998:web:c503047a08c81ec999e237"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const AUTH_DOMAIN_SUFFIX = "@zimssa-diet.local"; // 가짜 이메일 도메인 (실제 이메일 노출 방지)
+let currentUser = null; // 로그인한 Firebase 유저 객체
+let myName = ""; // 로그인한 사람의 실제 이름 (Firebase 문서에 저장된 displayName)
+
 // 상태
 const DEFAULT_DB = "https://diet-cae5a-default-rtdb.firebaseio.com";
 let DB_URL = DEFAULT_DB;
@@ -406,6 +424,9 @@ async function addEntry(member, food, calories) {
   render();
   await dbPut(seasonPath("entries") + "/" + entry.id, entry);
   await bumpLifetimeStat(member, "totalEntries", 1);
+  if (mealTypeSel === "아침") await bumpLifetimeStat(member, "morningMeals", 1);
+  const hour = new Date(entry.timestamp).getHours();
+  if (hour >= 22) await bumpLifetimeStat(member, "nightMeals", 1);
 }
 async function removeEntry(id) {
   const target = entries.find(e => e.id === id);
@@ -501,10 +522,13 @@ function render() {
     ? "시즌 1"
     : (seasons[currentSeasonId] ? seasons[currentSeasonId].name : "시즌");
   const isCurrentSeason = currentSeasonId === "default" || (seasons[currentSeasonId] && !seasons[currentSeasonId].ended);
+  html += '<div style="display:flex;align-items:center;gap:6px">';
+  html += '<button onclick="doLogout()" style="border:none;background:transparent;color:var(--faint);font-size:11px;font-weight:700;padding:4px 2px">👤 ' + esc(myName) + '</button>';
   html += '<button onclick="openSeasonMenu()" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--muted)">' +
     esc(currentSeasonName) +
     (!isCurrentSeason ? ' <span style="color:#E0726A;font-size:10px">종료</span>' : '') +
     ' ▾</button>';
+  html += '</div>';
   html += '</div>';
 
   // 하단 탭바
@@ -1013,6 +1037,87 @@ function copyInvite() {
 }
 
 // ── 시작/폴링 ──
+// ══════════ 로그인 / 가입 ══════════
+
+function deriveNameFromEmail(email) {
+  return decodeURIComponent(email.split("@")[0]);
+}
+
+function renderLoginScreen() {
+  const app = document.getElementById("app");
+  app.innerHTML =
+    '<div class="setup">' +
+    '<div style="font-size:32px;margin-bottom:8px">🏃🏻🏃‍♀️</div>' +
+    '<h1>짐싸 다이어트</h1>' +
+    '<p>내 이름을 선택하고 비밀번호를 입력하세요.</p>' +
+    '<div id="login-error" style="display:none;color:#E0726A;font-size:13px;font-weight:700;margin-bottom:8px"></div>' +
+    '<label class="flabel">이름</label>' +
+    '<select class="ti" id="login-name" style="margin-bottom:14px">' +
+      (members.length ? members.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + '</option>').join('') : '<option value="">등록된 멤버가 없어요</option>') +
+    '</select>' +
+    '<label class="flabel">비밀번호</label>' +
+    '<input class="ti" id="login-pw" type="password" placeholder="비밀번호" style="margin-bottom:14px" />' +
+    '<button class="save" onclick="doLogin()">로그인</button>' +
+    '<button onclick="renderSignupScreen()" style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:700">계정이 없으신가요? 가입하기</button>' +
+    '</div>';
+}
+
+function renderSignupScreen() {
+  const app = document.getElementById("app");
+  app.innerHTML =
+    '<div class="setup">' +
+    '<div style="font-size:32px;margin-bottom:8px">🏃🏻🏃‍♀️</div>' +
+    '<h1>계정 만들기</h1>' +
+    '<p>본인 이름을 선택하고 비밀번호를 정하세요. (6자 이상)</p>' +
+    '<div id="signup-error" style="display:none;color:#E0726A;font-size:13px;font-weight:700;margin-bottom:8px"></div>' +
+    '<label class="flabel">이름</label>' +
+    '<select class="ti" id="signup-name" style="margin-bottom:14px">' +
+      (members.length ? members.map(m => '<option value="' + esc(m.name) + '">' + esc(m.name) + '</option>').join('') : '<option value="">먼저 멤버를 추가해주세요</option>') +
+    '</select>' +
+    '<label class="flabel">비밀번호</label>' +
+    '<input class="ti" id="signup-pw" type="password" placeholder="비밀번호 (6자 이상)" style="margin-bottom:14px" />' +
+    '<button class="save" onclick="doSignup()">가입하기</button>' +
+    '<button onclick="renderLoginScreen()" style="width:100%;margin-top:10px;padding:12px;border-radius:12px;border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:700">이미 계정이 있어요</button>' +
+    '</div>';
+}
+
+async function doLogin() {
+  const name = document.getElementById("login-name").value;
+  const pw = document.getElementById("login-pw").value;
+  const errEl = document.getElementById("login-error");
+  errEl.style.display = "none";
+  if (!name || !pw) { errEl.textContent = "이름과 비밀번호를 입력해주세요."; errEl.style.display = "block"; return; }
+  const email = encodeURIComponent(name) + AUTH_DOMAIN_SUFFIX;
+  try {
+    await auth.signInWithEmailAndPassword(email, pw);
+  } catch (e) {
+    errEl.textContent = "로그인 실패: 이름 또는 비밀번호를 확인해주세요.";
+    errEl.style.display = "block";
+  }
+}
+
+async function doSignup() {
+  const name = document.getElementById("signup-name").value;
+  const pw = document.getElementById("signup-pw").value;
+  const errEl = document.getElementById("signup-error");
+  errEl.style.display = "none";
+  if (!name) { errEl.textContent = "이름을 선택해주세요."; errEl.style.display = "block"; return; }
+  if (!pw || pw.length < 6) { errEl.textContent = "비밀번호는 6자 이상이어야 해요."; errEl.style.display = "block"; return; }
+  const email = encodeURIComponent(name) + AUTH_DOMAIN_SUFFIX;
+  try {
+    await auth.createUserWithEmailAndPassword(email, pw);
+  } catch (e) {
+    if (e.code === "auth/email-already-in-use") errEl.textContent = "이미 가입된 이름이에요. 로그인해주세요.";
+    else errEl.textContent = "가입 실패: " + e.message;
+    errEl.style.display = "block";
+  }
+}
+
+async function doLogout() {
+  if (!confirm("로그아웃할까요?")) return;
+  await auth.signOut();
+}
+
 async function start() {
   if (!DB_URL) { renderSetup(); return; }
   render();
@@ -2635,6 +2740,7 @@ async function estimateFromPhoto(input) {
     html += "<br><b>합계: " + parsed.total + "kcal</b>";
     html += '<br><button onclick="applyPhotoEstimate(' + parsed.total + ', \'' + esc(parsed.foods.map(f=>f.name).join(", ")) + '\')" style="margin-top:8px;width:100%;padding:10px;border-radius:12px;border:none;background:#4CAF50;color:#fff;font-size:14px;font-weight:800;">이 값으로 입력하기</button>';
     resultDiv.innerHTML = html;
+    await bumpLifetimeStat(addMemberSel || view, "photoEstimateCount", 1);
 
   } catch(e) {
     resultDiv.innerHTML = "분석 실패: " + e.message;
@@ -2807,11 +2913,25 @@ function getLifetimeBadgeCatalog(name) {
   const totalExercises = s.totalExercises || 0;
   const bestStreak = s.bestStreak || 0;
   const seasonsCount = s.seasonsCount || 0;
+  const morningMeals = s.morningMeals || 0;
+  const nightMeals = s.nightMeals || 0;
+  const voteCount = s.voteCount || 0;
+  const noticeCount = s.noticeCount || 0;
+  const goalSuccessCount = s.goalSuccessCount || 0;
+  const photoEstimateCount = s.photoEstimateCount || 0;
+  const aiChatCount = s.aiChatCount || 0;
   return [
     { emoji: '📝', name: '기록 장인', desc: '누적 식단 기록 100회', current: totalEntries, target: 100, achieved: totalEntries >= 100 },
     { emoji: '💪', name: '철인', desc: '누적 운동 기록 100회', current: totalExercises, target: 100, achieved: totalExercises >= 100 },
     { emoji: '🔥', name: '불꽃의 의지', desc: '역대 최고 스트릭 30일', current: bestStreak, target: 30, achieved: bestStreak >= 30 },
-    { emoji: '❤️', name: '꾸준한 사람', desc: '3개 시즌 이상 참여', current: seasonsCount, target: 3, achieved: seasonsCount >= 3 }
+    { emoji: '❤️', name: '꾸준한 사람', desc: '3개 시즌 이상 참여', current: seasonsCount, target: 3, achieved: seasonsCount >= 3 },
+    { emoji: '⏰', name: '아침형 인간', desc: '아침 식사 기록 30회', current: morningMeals, target: 30, achieved: morningMeals >= 30 },
+    { emoji: '🌙', name: '올빼미', desc: '밤 10시 이후 기록 30회', current: nightMeals, target: 30, achieved: nightMeals >= 30 },
+    { emoji: '🗳️', name: '투표왕', desc: '누적 투표 참여 30회', current: voteCount, target: 30, achieved: voteCount >= 30 },
+    { emoji: '📢', name: '소통왕', desc: '누적 공지 작성 10회', current: noticeCount, target: 10, achieved: noticeCount >= 10 },
+    { emoji: '✅', name: '약속왕', desc: '시즌 목표 성공 3회', current: goalSuccessCount, target: 3, achieved: goalSuccessCount >= 3 },
+    { emoji: '📷', name: '사진왕', desc: '사진 칼로리 추정 20회 사용', current: photoEstimateCount, target: 20, achieved: photoEstimateCount >= 20 },
+    { emoji: '🤖', name: 'AI 친구', desc: 'AI 채팅 50회 사용', current: aiChatCount, target: 50, achieved: aiChatCount >= 50 }
   ];
 }
 
@@ -2915,26 +3035,39 @@ async function logBadgeAchievement(name, emoji, badgeName, isHidden) {
 
 // 이성호 전용: 지금까지의 모든 시즌 기록을 소급 집계해서 lifetimeStats 재계산
 async function recalcLifetimeStats() {
-  if (view !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
-  if (!confirm("지금까지의 모든 기록을 기준으로 배지 진행률을 다시 계산할까요?")) return;
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  if (!confirm("지금까지의 모든 기록을 기준으로 배지 진행률을 다시 계산할까요?\n(사진왕/AI친구는 과거 사용 기록이 없어서 지금부터만 반영돼요)")) return;
 
   const seasonIds = ["default", ...Object.keys(seasons || {})];
   const allEntries = [];
   const allExercises = [];
+  const allPolls = [];
+  const allNotices = [];
+  const allGoals = [];
   const participatedSeasons = {}; // name -> Set(seasonId)
 
   for (const sid of seasonIds) {
     const entriesPath = sid === "default" ? "entries" : "seasons/" + sid + "/entries";
     const exercisesPath = sid === "default" ? "exercises" : "seasons/" + sid + "/exercises";
-    const [e, ex] = await Promise.all([dbGet(entriesPath), dbGet(exercisesPath)]);
+    const pollsPath = sid === "default" ? "polls" : "seasons/" + sid + "/polls";
+    const noticesPath = sid === "default" ? "notices" : "seasons/" + sid + "/notices";
+    const hallPath = sid === "default" ? "hall" : "seasons/" + sid + "/hall";
+    const [e, ex, p, n, h] = await Promise.all([
+      dbGet(entriesPath), dbGet(exercisesPath), dbGet(pollsPath), dbGet(noticesPath), dbGet(hallPath)
+    ]);
     const eArr = e ? Object.values(e) : [];
     const exArr = ex ? Object.values(ex) : [];
+    const pArr = p ? Object.values(p) : [];
+    const nArr = n ? Object.values(n) : [];
     eArr.forEach(en => {
       allEntries.push(en);
       if (!participatedSeasons[en.member]) participatedSeasons[en.member] = new Set();
       participatedSeasons[en.member].add(sid);
     });
     exArr.forEach(exn => allExercises.push(exn));
+    pArr.forEach(pn => allPolls.push(pn));
+    nArr.forEach(nn => allNotices.push(nn));
+    if (h && h.goals) h.goals.forEach(g => allGoals.push(g));
   }
 
   for (const m of members) {
@@ -2944,6 +3077,25 @@ async function recalcLifetimeStats() {
     const totalEntries = mEntries.length;
     const totalExercises = mExercises.length;
     const seasonsCount = participatedSeasons[name] ? participatedSeasons[name].size : 0;
+
+    // 아침/야식 기록 횟수
+    const morningMeals = mEntries.filter(e => e.mealType === "아침").length;
+    const nightMeals = mEntries.filter(e => new Date(e.timestamp).getHours() >= 22).length;
+
+    // 투표 참여 횟수 (모든 시즌 투표의 모든 선택지 중 내가 투표한 것 전부 합산)
+    let voteCount = 0;
+    allPolls.forEach(poll => {
+      if (!poll.options) return;
+      Object.values(poll.options).forEach(opt => {
+        if (opt.voters && opt.voters[name]) voteCount++;
+      });
+    });
+
+    // 공지 작성 횟수
+    const noticeCount = allNotices.filter(n => n.author === name).length;
+
+    // 시즌 목표 성공 횟수 (지난 시즌들의 명예의 전당 goals 기준)
+    const goalSuccessCount = allGoals.filter(g => g.name === name && g.result === "success").length;
 
     // 전체 기간 통틀어 최고 연속 기록일 계산 (실제 입력 시각 기준)
     const dateSet = new Set(mEntries.map(e => fmtKey(new Date(e.timestamp))));
@@ -2955,17 +3107,24 @@ async function recalcLifetimeStats() {
       prevDate = d;
     });
 
+    const prevStats = lifetimeStats[name] || {};
     lifetimeStats[name] = {
+      ...prevStats,
       totalEntries,
       totalExercises,
-      bestStreak: Math.max(best, (lifetimeStats[name] || {}).bestStreak || 0),
-      seasonsCount
+      bestStreak: Math.max(best, prevStats.bestStreak || 0),
+      seasonsCount,
+      morningMeals: Math.max(morningMeals, prevStats.morningMeals || 0),
+      nightMeals: Math.max(nightMeals, prevStats.nightMeals || 0),
+      voteCount: Math.max(voteCount, prevStats.voteCount || 0),
+      noticeCount: Math.max(noticeCount, prevStats.noticeCount || 0),
+      goalSuccessCount: Math.max(goalSuccessCount, prevStats.goalSuccessCount || 0)
     };
     await dbPut("lifetimeStats/" + encodeURIComponent(name), lifetimeStats[name]);
     await checkFirstAchievers(name);
   }
 
-  alert("지금까지의 기록을 반영했어요! 🎉");
+  alert("지금까지의 기록을 반영했어요! 🎉\n(사진왕/AI친구는 지금부터의 사용만 카운트돼요)");
   render();
 }
 
@@ -3072,7 +3231,7 @@ function openBadgeCollection() {
   let html = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
     '<div class="phead"><h2>🏅 배지 컬렉션</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>';
 
-  if (view === "이성호") {
+  if (myName === "이성호") {
     html += '<button onclick="recalcLifetimeStats()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">🔄 지금까지의 기록 반영하기</button>';
   }
 
@@ -3443,7 +3602,7 @@ function openSeasonMenu() {
   });
   html += '</div>';
 
-  if (view === "이성호") {
+  if (myName === "이성호") {
     html += '<div style="display:flex;gap:8px">';
     html += '<button onclick="openNewSeason()" style="flex:1;padding:14px;border-radius:14px;border:1px dashed var(--faint);background:transparent;color:var(--muted);font-size:14px;font-weight:800">+ 새 시즌</button>';
     const curSeason = seasonList.find(s => s.id === currentSeasonId);
@@ -3604,6 +3763,9 @@ async function endSeason(goalResults = {}) {
     result: goalResults[m.name] || "none"
   }));
   hall.goals = goalSummary;
+  for (const g of goalSummary) {
+    if (g.result === "success") await bumpLifetimeStat(g.name, "goalSuccessCount", 1);
+  }
 
   // Firebase에 저장
   if (currentSeasonId === "default") {
@@ -3771,12 +3933,12 @@ function renderWeeklyHistoryHtml() {
   let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
   if (records.length === 0) {
     html += '<div class="empty">아직 지난 주 기록이 없어요.<br>다음 주 월요일에 자동 저장돼요!</div>';
-    if (view === "이성호") html += '<div style="text-align:center;margin-top:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:10px 20px;border-radius:12px">🔄 지난 주 기록 저장</button></div>';
+    if (myName === "이성호") html += '<div style="text-align:center;margin-top:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:10px 20px;border-radius:12px">🔄 지난 주 기록 저장</button></div>';
     html += '</div>';
     return html;
   }
   // 이성호 전용 재저장 버튼
-  if (view === "이성호") {
+  if (myName === "이성호") {
     html += '<div style="text-align:center;margin-bottom:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:8px 16px;border-radius:10px">🔄 지난 주 기록 재저장</button></div>';
   }
   const medals = ['🥇','🥈','🥉'];
@@ -4068,7 +4230,7 @@ function renderMukbangHtml() {
       html += '<span style="font-size:14px;font-weight:700">' + medal + ' ' + esc(m.name) + '</span>';
       if (m.warningCount > 0) html += '<span style="font-size:11px;color:#E0726A;font-weight:800">⚠️' + m.warningCount + '회</span>';
       if (m.thumbCount > 0) html += '<span style="font-size:11px;color:#4CAF50;font-weight:800">👍' + m.thumbCount + '회</span>';
-      if (view === "이성호") {
+      if (myName === "이성호") {
         html += '<button onclick="giveWarning(\'' + esc(m.name) + '\')" style="border:none;background:transparent;color:#E0726A;font-size:11px;padding:0 2px;cursor:pointer">⚠️+</button>';
         if (m.warningCount > 0) html += '<button onclick="removeWarning(\'' + esc(m.name) + '\')" style="border:none;background:transparent;color:var(--faint);font-size:11px;padding:0 2px;cursor:pointer">⚠️-</button>';
         html += '<button onclick="giveThumbs(\'' + esc(m.name) + '\')" style="border:none;background:transparent;color:#4CAF50;font-size:11px;padding:0 2px;cursor:pointer">👍+</button>';
@@ -4298,7 +4460,7 @@ function renderHealthCard() {
 
 // ── 경고 ──
 async function giveWarning(name) {
-  if (view !== "이성호") return;
+  if (myName !== "이성호") return;
   if (!confirm(name + " 님에게 경고를 줄까요? (다이어트 점수 -3점)")) return;
   const cur = warnings[name] || { count: 0, logs: [] };
   cur.count = (cur.count || 0) + 1;
@@ -4309,7 +4471,7 @@ async function giveWarning(name) {
   await loadAll(); render();
 }
 async function removeWarning(name) {
-  if (view !== "이성호") return;
+  if (myName !== "이성호") return;
   const cur = warnings[name];
   if (!cur || cur.count <= 0) return;
   if (!confirm(name + " 님 경고를 1회 취소할까요?")) return;
@@ -4322,7 +4484,7 @@ async function removeWarning(name) {
 
 // ── 따봉 ──
 async function giveThumbs(name) {
-  if (view !== "이성호") return;
+  if (myName !== "이성호") return;
   if (!confirm(name + " 님에게 따봉을 줄까요? (다이어트 점수 +3점)")) return;
   const cur = thumbs[name] || { count: 0, logs: [] };
   cur.count = (cur.count || 0) + 1;
@@ -4333,7 +4495,7 @@ async function giveThumbs(name) {
   await loadAll(); render();
 }
 async function removeThumb(name) {
-  if (view !== "이성호") return;
+  if (myName !== "이성호") return;
   const cur = thumbs[name];
   if (!cur || cur.count <= 0) return;
   if (!confirm(name + " 님 따봉을 1회 취소할까요?")) return;
@@ -4513,6 +4675,7 @@ async function sendAIMessage() {
     aiHistory.push({ role: "model", parts: [{ text: "오류: " + e.message }], displayText: "오류: " + e.message });
     setAiHistory(aiHistory);
   }
+  if (view !== "all") await bumpLifetimeStat(view, "aiChatCount", 1);
   aiTyping = false;
   render();
   setTimeout(() => {
@@ -4587,7 +4750,7 @@ function renderNoticeHtml() {
         '<div style="font-size:16px;font-weight:800;flex:1;margin-right:8px">' + esc(notice.title) + '</div>' +
         '<div style="display:flex;gap:6px;flex-shrink:0">' +
         '<button onclick="openEditNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:700;padding:2px 4px">수정</button>' +
-        (view === "이성호" ? '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px">삭제</button>' : '') +
+        (myName === "이성호" ? '<button onclick="deleteNotice(\'' + notice.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px">삭제</button>' : '') +
         '</div>' +
         '</div>';
       if (notice.content) {
@@ -4634,6 +4797,7 @@ async function submitNewNotice() {
   const notice = { id, title, content, author, date: fmtKey(new Date()), createdAt: Date.now() };
   notices[id] = notice;
   await dbPut(seasonPath("notices") + "/" + id, notice);
+  await bumpLifetimeStat(author, "noticeCount", 1);
   closeModal();
   await loadAll(); render();
 }
@@ -4698,12 +4862,15 @@ async function castVote(pollId, optId) {
   const opt = poll.options[optId];
   if (!opt) return;
   if (!opt.voters) opt.voters = {};
+  let isNewVote = false;
   if (opt.voters[view]) {
     delete opt.voters[view]; // 취소
   } else {
     opt.voters[view] = true;
+    isNewVote = true;
   }
   await dbPut(seasonPath("polls") + "/" + pollId + "/options/" + optId + "/voters", opt.voters);
+  await bumpLifetimeStat(view, "voteCount", isNewVote ? 1 : -1);
   await loadAll(); render();
 }
 
@@ -4846,9 +5013,32 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen });
 
-start();
+// ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
+let membersPreloaded = false;
+async function preloadMembersForAuthScreen() {
+  if (membersPreloaded) return;
+  try {
+    const m = await dbGet(seasonPath("members"));
+    members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
+    membersPreloaded = true;
+  } catch (e) {}
+}
+
+auth.onAuthStateChanged(async (user) => {
+  if (user) {
+    currentUser = user;
+    myName = deriveNameFromEmail(user.email);
+    view = myName; // 로그인하면 기본으로 내 이름 화면
+    start();
+  } else {
+    currentUser = null;
+    myName = "";
+    await preloadMembersForAuthScreen();
+    renderLoginScreen();
+  }
+});
 </script>
 </body>
 </html>
