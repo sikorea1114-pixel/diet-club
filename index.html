@@ -3886,7 +3886,8 @@ async function autoSaveLastWeek() {
   const mvpData = members.map(m => {
     let score = 0, recordDays = 0, totalKcal = 0;
     weekDays2.forEach(d => {
-      const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.calories, 0);
+      const dayEntries = entries.filter(e => e.member === m.name && e.date === d);
+      const dayKcal = dayEntries.reduce((s,e) => s + e.calories, 0);
       if (!dayKcal) return;
       totalKcal += dayKcal;
       const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s + e.burned, 0);
@@ -3894,6 +3895,8 @@ async function autoSaveLastWeek() {
       score += 10;
       if (netKcal <= 1500) score += 5;
       if (netKcal > 2000) score -= 5;
+      const mealTypes = new Set(dayEntries.map(e => e.mealType));
+      if (mealTypes.has("아침") && mealTypes.has("점심") && mealTypes.has("저녁")) score += 2;
       recordDays++;
     });
     const exDays = new Set(exercises.filter(e => e.member === m.name && weekDays2.includes(e.date)).map(e => e.date)).size;
@@ -4161,7 +4164,8 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
     const mvpData = members.map(m => {
       let score = 0, recordDays = 0, totalKcal = 0;
       weekDaysArr.forEach(d => {
-        const dayKcal = entries.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s+e.calories, 0);
+        const dayEntries = entries.filter(e => e.member === m.name && e.date === d);
+        const dayKcal = dayEntries.reduce((s,e) => s+e.calories, 0);
         if (!dayKcal) return;
         totalKcal += dayKcal;
         const dayBurned = exercises.filter(e => e.member === m.name && e.date === d).reduce((s,e) => s+e.burned, 0);
@@ -4169,6 +4173,8 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
         score += 10;
         if (netKcal <= 1500) score += 5;
         if (netKcal > 2000) score -= 5;
+        const mealTypes = new Set(dayEntries.map(e => e.mealType));
+        if (mealTypes.has("아침") && mealTypes.has("점심") && mealTypes.has("저녁")) score += 2;
         recordDays++;
       });
       const exDays = new Set(exercises.filter(e => e.member === m.name && weekDaysArr.includes(e.date)).map(e => e.date)).size;
@@ -4205,26 +4211,7 @@ function renderMukbangHtml() {
   let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
   // 다이어트 점수 카드 (먹방왕 데이터 없어도 항상 표시)
-  const scoreData = members.map(m => {
-    const mEntries = entries.filter(e => e.member === m.name);
-    const mExercises = exercises.filter(e => e.member === m.name);
-    const recordDays = [...new Set(mEntries.map(e => e.date))];
-    const exDays = [...new Set(mExercises.map(e => e.date))];
-    const warningCount = (warnings[m.name] || {}).count || 0;
-    const thumbCount = (thumbs[m.name] || {}).count || 0;
-    let score = 0;
-    score += recordDays.length * 10;
-    score += exDays.length * 5;
-    score -= warningCount * 3;
-    score += thumbCount * 3;
-    recordDays.forEach(d => {
-      const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
-      if (dayKcal === 0) return;
-      if (dayKcal <= 1500) score += 5;
-      if (dayKcal > 2000) score -= 5;
-    });
-    return { name: m.name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount };
-  }).sort((a,b) => b.score - a.score);
+  const scoreData = members.map(m => calcSeasonScore(m.name)).sort((a,b) => b.score - a.score);
 
   const weekData = members.map(m => {
     const wEntries = entries.filter(e => e.date >= fmtKey(wr.start) && e.date <= fmtKey(wr.end) && e.member === m.name);
@@ -4241,7 +4228,7 @@ function renderMukbangHtml() {
     html += '<div style="font-size:13px;font-weight:700;color:var(--muted)">⭐ 시즌 다이어트 점수</div>';
     html += '<button onclick="openBadgeCollection()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">🏅 배지 컬렉션</button>';
     html += '</div>';
-    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">기록일 +10 · 운동 +5 · 1500kcal이하 +5 · 2000kcal초과 -5 · 경고 -3</div>';
+    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">기록일 +10 · 운동 +5 · 삼시세끼 +2 · 1500kcal이하 +5 · 2000kcal초과 -5 · 경고 -3</div>';
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
     scoreData.forEach((m, i) => {
       const pct = maxScore > 0 ? Math.max(0, Math.round(m.score / maxScore * 100)) : 0;
@@ -5057,14 +5044,18 @@ function calcSeasonScore(name) {
   score -= warningCount * 3;
   score += thumbCount * 3;
   let totalKcal = 0;
+  let fullMealDays = 0;
   recordDays.forEach(d => {
-    const dayKcal = mEntries.filter(e => e.date === d).reduce((s,e) => s + e.calories, 0);
+    const dayEntries = mEntries.filter(e => e.date === d);
+    const dayKcal = dayEntries.reduce((s,e) => s + e.calories, 0);
     totalKcal += dayKcal;
     if (dayKcal === 0) return;
     if (dayKcal <= 1500) score += 5;
     if (dayKcal > 2000) score -= 5;
+    const mealTypes = new Set(dayEntries.map(e => e.mealType));
+    if (mealTypes.has("아침") && mealTypes.has("점심") && mealTypes.has("저녁")) { score += 2; fullMealDays++; }
   });
-  return { name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount, totalKcal };
+  return { name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount, totalKcal, fullMealDays };
 }
 
 function calcStreak(memberName) {
