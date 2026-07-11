@@ -4228,7 +4228,7 @@ function renderMukbangHtml() {
     html += '<div style="font-size:13px;font-weight:700;color:var(--muted)">⭐ 시즌 다이어트 점수</div>';
     html += '<button onclick="openBadgeCollection()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">🏅 배지 컬렉션</button>';
     html += '</div>';
-    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">기록일 +10 · 운동 +5 · 삼시세끼 +2 · 1500kcal이하 +5 · 2000kcal초과 -5 · 경고 -3</div>';
+    html += '<div style="font-size:11px;color:var(--faint);margin-bottom:12px">기록일 +10 · 운동 +5 · 삼시세끼 +2 · 1500kcal이하 +5 · 2000kcal초과 -5 · 경고 -3 · 스트릭30일↑ +25</div>';
     html += '<div style="display:flex;flex-direction:column;gap:10px">';
     scoreData.forEach((m, i) => {
       const pct = maxScore > 0 ? Math.max(0, Math.round(m.score / maxScore * 100)) : 0;
@@ -4248,7 +4248,7 @@ function renderMukbangHtml() {
       html += '</div>';
       html += '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + m.score + '점</span>';
       html += '</div>';
-      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">' + m.recordDays + '일 기록 · 운동 ' + m.exDays + '일' + (m.warningCount > 0 ? ' · ⚠️-' + (m.warningCount*3) + '점' : '') + (m.thumbCount > 0 ? ' · 👍+' + (m.thumbCount*3) + '점' : '') + '</div>';
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">' + m.recordDays + '일 기록 · 운동 ' + m.exDays + '일' + (m.warningCount > 0 ? ' · ⚠️-' + (m.warningCount*3) + '점' : '') + (m.thumbCount > 0 ? ' · 👍+' + (m.thumbCount*3) + '점' : '') + (m.bestStreakInSeason >= 30 ? ' · 🔥30일↑+25점' : '') + '</div>';
       html += '<div style="height:7px;background:var(--bg);border-radius:99px;overflow:hidden">' +
         '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'var(--accent)':colorOf(m.name)) + ';border-radius:99px"></div></div>';
       html += '</div>';
@@ -5055,7 +5055,17 @@ function calcSeasonScore(name) {
     const mealTypes = new Set(dayEntries.map(e => e.mealType));
     if (mealTypes.has("아침") && mealTypes.has("점심") && mealTypes.has("저녁")) { score += 2; fullMealDays++; }
   });
-  return { name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount, totalKcal, fullMealDays };
+  // 시즌 내 최고 연속 기록일(스트릭) — 30일 이상이면 +25점 보너스 (실제 입력 시각 기준)
+  const dateSet = new Set(mEntries.map(e => fmtKey(new Date(e.timestamp))));
+  const sortedDates = [...dateSet].sort();
+  let bestStreakInSeason = 0, cur = 0, prevDate = null;
+  sortedDates.forEach(d => {
+    cur = (prevDate && (new Date(d) - new Date(prevDate)) / 86400000 === 1) ? cur + 1 : 1;
+    bestStreakInSeason = Math.max(bestStreakInSeason, cur);
+    prevDate = d;
+  });
+  if (bestStreakInSeason >= 30) score += 25;
+  return { name, score, recordDays: recordDays.length, exDays: exDays.length, warningCount, thumbCount, totalKcal, fullMealDays, bestStreakInSeason };
 }
 
 function calcStreak(memberName) {
