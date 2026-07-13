@@ -4642,7 +4642,8 @@ async function sendAIMessage() {
         const mEntries = entries.filter(e => e.member === m.name && e.date === todayKey);
         const mKcal = mEntries.reduce((s,e) => s + e.calories, 0);
         const mBurned = exercises.filter(e => e.member === m.name && e.date === todayKey).reduce((s,e) => s + e.burned, 0);
-        return m.name + ": " + mKcal + "kcal 섭취" + (mBurned > 0 ? " / 운동 -" + mBurned + "kcal" : "") + (mKcal === 0 ? " (미기록)" : "");
+        const streak = calcStreak(m.name);
+        return m.name + ": " + mKcal + "kcal 섭취" + (mBurned > 0 ? " / 운동 -" + mBurned + "kcal" : "") + (mKcal === 0 ? " (미기록)" : "") + (streak > 0 ? " / 스트릭 " + streak + "일" : "");
       }).join("\n");
       systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
         "오늘 모임 전체 현황:\n" + memberStats + "\n" +
@@ -4654,16 +4655,34 @@ async function sendAIMessage() {
       const mBurned = exercises.filter(e => e.member === view && e.date === todayKey).reduce((s,e) => s + e.burned, 0);
       const netKcal = mKcal - mBurned;
       const foods = mEntries.map(e => e.food + "(" + e.calories + "kcal)").join(", ") || "없음";
-      // 이번 주 요약
-      const wr = getWeekRange(new Date());
-      const weekEntries2 = entries.filter(e => e.member === view && new Date(e.timestamp) >= wr.start && new Date(e.timestamp) <= wr.end);
-      const weekKcal = weekEntries2.reduce((s,e) => s + e.calories, 0);
-      const weekDays = new Set(weekEntries2.map(e => e.date)).size;
+
+      // 최근 7일 일별 추이
+      const recentDays = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        recentDays.push(fmtKey(d));
+      }
+      const dailyTrend = recentDays.map(d => {
+        const dayKcal = entries.filter(e => e.member === view && e.date === d).reduce((s,e) => s + e.calories, 0);
+        const dayBurned = exercises.filter(e => e.member === view && e.date === d).reduce((s,e) => s + e.burned, 0);
+        return d.slice(5) + ": " + (dayKcal > 0 ? dayKcal + "kcal" + (dayBurned > 0 ? "(-운동" + dayBurned + ")" : "") : "미기록");
+      }).join(" / ");
+
+      // 현재 스트릭
+      const streak = calcStreak(view);
+
+      // 시즌 전체 누적
+      const seasonInfo = calcSeasonScore(view);
+      const avgKcal = seasonInfo.recordDays > 0 ? Math.round(seasonInfo.totalKcal / seasonInfo.recordDays) : 0;
+
       systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
         "현재 사용자: " + view + "\n" +
         "오늘 섭취: " + mKcal + "kcal / 운동 소모: " + mBurned + "kcal / 순칼로리: " + netKcal + "kcal\n" +
         "오늘 먹은 것: " + foods + "\n" +
-        "이번 주: " + weekDays + "일 기록 / 총 " + weekKcal.toLocaleString() + "kcal\n" +
+        "최근 7일 추이: " + dailyTrend + "\n" +
+        "현재 연속 기록 스트릭: " + streak + "일\n" +
+        "이번 시즌 전체: " + seasonInfo.recordDays + "일 기록 / 하루 평균 " + avgKcal + "kcal / 운동 " + seasonInfo.exDays + "일 / 시즌 점수 " + seasonInfo.score + "점\n" +
+        "이전 대화 맥락이나 과거 질문은 기억하지 못하니, 필요한 과거 데이터는 위 요약을 참고해서 답변해요.\n" +
         "짧고 친근하게 한국어로 답변해요. 이모지 적절히 사용해요.\n\n";
     }
   }
