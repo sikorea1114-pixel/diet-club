@@ -4583,6 +4583,7 @@ function renderAIHtml() {
   html += '<button onclick="changeGeminiKey()" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:0">키 변경</button>';
   html += '</div></div>';
   html += '<div id="ai-chat-box" style="display:flex;flex-direction:column;gap:10px;padding:0 0 16px">';
+  const canChatHere = view === "all" || view === myName;
   const aiHistory = getAiHistory();
   if (aiHistory.length === 0) {
     html += '<div style="text-align:center;padding:24px;color:var(--muted);font-size:14px">안녕하세요! 다이어트 관련 뭐든 물어보세요 😊</div>';
@@ -4597,10 +4598,14 @@ function renderAIHtml() {
     html += '<div style="display:flex;justify-content:flex-start"><div style="padding:12px 16px;border-radius:18px 18px 18px 4px;background:var(--surface);border:1px solid var(--line);font-size:20px">💭</div></div>';
   }
   html += '</div>';
-  html += '<div style="position:sticky;bottom:0;left:0;right:0;display:flex;gap:8px;background:var(--bg);padding:12px 0 8px;margin-top:8px">';
-  html += '<input class="ti" id="ai-input" placeholder="다이어트 질문을 입력하세요..." style="flex:1;margin:0;font-size:15px" onkeydown="if(event.key==\'Enter\')sendAIMessage()" />';
-  html += '<button onclick="sendAIMessage()" style="padding:0 18px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:20px;flex-shrink:0">↑</button>';
-  html += '</div>';
+  if (canChatHere) {
+    html += '<div style="position:sticky;bottom:0;left:0;right:0;display:flex;gap:8px;background:var(--bg);padding:12px 0 8px;margin-top:8px">';
+    html += '<input class="ti" id="ai-input" placeholder="다이어트 질문을 입력하세요..." style="flex:1;margin:0;font-size:15px" onkeydown="if(event.key==\'Enter\')sendAIMessage()" />';
+    html += '<button onclick="sendAIMessage()" style="padding:0 18px;border-radius:14px;border:none;background:var(--accent);color:#fff;font-size:20px;flex-shrink:0">↑</button>';
+    html += '</div>';
+  } else {
+    html += '<div style="position:sticky;bottom:0;left:0;right:0;background:var(--bg);padding:12px 0 8px;margin-top:8px;text-align:center;font-size:13px;color:var(--faint);font-weight:700">본인 이름을 선택해야 AI와 채팅할 수 있어요</div>';
+  }
   html += '</div>';
   return html;
 }
@@ -4619,6 +4624,7 @@ async function resetAIChat() {
 }
 
 async function sendAIMessage() {
+  if (view !== "all" && view !== myName) { alert("본인 이름을 선택해야 AI와 채팅할 수 있어요!"); return; }
   const input = document.getElementById("ai-input");
   if (!input) return;
   const text = input.value.trim();
