@@ -246,6 +246,7 @@ let board = {}; // 익명 건의함
 let seasons = {};
 let currentSeasonId = "default";
 let defaultSeasonEnded = false; // 기본 시즌(시즌1) 종료 여부
+let profiles = {}; // 멤버별 신체정보 (건강왕 계산용, Firebase 공유)
 let date = new Date();
 let view = "all";
 let mode = "home";
@@ -359,7 +360,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd, dse] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd, dse, pr] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -380,7 +381,8 @@ async function loadAll() {
     dbGet("lifetimeTitles"),
     dbGet("badgeLog/" + fmtKey(new Date())),
     dbGet(seasonPath("board")),
-    dbGet("defaultSeasonEnded")
+    dbGet("defaultSeasonEnded"),
+    dbGet("profiles")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -392,6 +394,7 @@ async function loadAll() {
   meetDate = md || "";
   hall = h || null;
   defaultSeasonEnded = !!dse;
+  profiles = pr || {};
   exercises = ex ? Object.values(ex) : [];
   if (gk) geminiKey = gk;
   if (ac && Array.isArray(ac)) {
@@ -2926,13 +2929,11 @@ function saveMyWeight(name, w) {
   try { localStorage.setItem("dietclub_weight_" + (name || ""), w); } catch {}
 }
 function getMyProfile(name) {
-  try {
-    const raw = localStorage.getItem("dietclub_profile_" + (name || ""));
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+  return profiles[name] || null;
 }
-function saveMyProfile(name, profile) {
-  try { localStorage.setItem("dietclub_profile_" + (name || ""), JSON.stringify(profile)); } catch {}
+async function saveMyProfile(name, profile) {
+  profiles[name] = profile;
+  await dbPut("profiles/" + encodeURIComponent(name), profile);
 }
 // ══════════ 배지 시스템 (평생 배지 + 히든 배지) ══════════
 
@@ -3064,6 +3065,32 @@ async function logBadgeAchievement(name, emoji, badgeName, isHidden) {
 }
 
 // 이성호 전용: 지금까지의 모든 시즌 기록을 소급 집계해서 lifetimeStats 재계산
+// 이성호 전용: 중복 부여된 시즌 타이틀 정리 (같은 라벨 중복 → 1개만 남김)
+async function dedupeLifetimeTitles() {
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  if (!confirm("중복으로 쌓인 시즌 타이틀을 정리할까요? (같은 타이틀은 1개만 남겨요)")) return;
+  let totalRemoved = 0;
+  for (const name of Object.keys(lifetimeTitles)) {
+    const titles = lifetimeTitles[name] || [];
+    const seen = new Set();
+    const deduped = [];
+    titles.forEach(t => {
+      if (!seen.has(t.label)) {
+        seen.add(t.label);
+        deduped.push(t);
+      } else {
+        totalRemoved++;
+      }
+    });
+    if (deduped.length !== titles.length) {
+      lifetimeTitles[name] = deduped;
+      await dbPut("lifetimeTitles/" + encodeURIComponent(name), deduped);
+    }
+  }
+  alert(totalRemoved + "개의 중복 타이틀을 정리했어요! 🧹");
+  render();
+}
+
 async function recalcLifetimeStats() {
   if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
   if (!confirm("지금까지의 모든 기록을 기준으로 배지 진행률을 다시 계산할까요?\n(사진왕/AI친구는 과거 사용 기록이 없어서 지금부터만 반영돼요)")) return;
@@ -3205,6 +3232,7 @@ function showBadgeCelebration(name, emoji, badgeName, isHidden) {
 async function grantLifetimeTitle(name, emoji, label) {
   if (!name) return;
   const cur = lifetimeTitles[name] || [];
+  if (cur.some(t => t.label === label)) return; // 같은 타이틀 중복 부여 방지
   const entry = { emoji, label, awardedAt: Date.now() };
   const updated = [...cur, entry];
   lifetimeTitles[name] = updated;
@@ -3262,7 +3290,8 @@ function openBadgeCollection() {
     '<div class="phead"><h2>🏅 배지 컬렉션</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>';
 
   if (myName === "이성호") {
-    html += '<button onclick="recalcLifetimeStats()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">🔄 지금까지의 기록 반영하기</button>';
+    html += '<button onclick="recalcLifetimeStats()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">🔄 지금까지의 기록 반영하기</button>';
+    html += '<button onclick="dedupeLifetimeTitles()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed #E0726A;background:#FDF0EF;color:#E0726A;font-size:12px;font-weight:700">🧹 중복 시즌 타이틀 정리하기</button>';
   }
 
   if (members.length > 1) {
@@ -3394,13 +3423,13 @@ function calcTDEE(profile) {
   return Math.round(bmr * (activityMap[profile.activity] || 1.375));
 }
 function openMyProfile() {
-  const name = view !== "all" ? view : null;
-  if (!name) { alert("이름을 먼저 선택해주세요!"); return; }
+  const name = myName;
+  if (!name) { alert("로그인 후 이용해주세요!"); return; }
   const p = getMyProfile(name) || {};
   const m = document.getElementById("modal");
   m.innerHTML = '<div class="overlay" onclick="closeModal(event)"><div class="popup" onclick="event.stopPropagation()">' +
     '<div class="phead"><h2>내 신체정보</h2><button class="x" onclick="closeModal()">' + iconX() + '</button></div>' +
-    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;padding:10px 12px;background:var(--bg);border-radius:10px">🔒 이 정보는 내 기기에만 저장돼요. 다른 멤버에게 보이지 않아요.</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-bottom:16px;padding:10px 12px;background:var(--bg);border-radius:10px">💚 건강왕 랭킹 계산을 위해 모임 멤버에게 공유돼요. 권장칼로리 산출에만 쓰여요.</div>' +
     '<label class="flabel">성별</label>' +
     '<div style="display:flex;gap:8px;margin-bottom:16px">' +
     '<button id="gender-male" onclick="pickGender(\'male\')" style="flex:1;padding:12px;border-radius:12px;border:1px solid ' + (p.gender==='male'?'var(--accent)':'var(--line)') + ';background:' + (p.gender==='male'?'var(--accent-soft)':'transparent') + ';font-size:14px;font-weight:700">남성</button>' +
@@ -3438,7 +3467,7 @@ function pickGender(g) {
     btn.style.background = s === g ? 'var(--accent-soft)' : 'transparent';
   });
 }
-function submitMyProfile(name) {
+async function submitMyProfile(name) {
   const age = parseInt(document.getElementById('profile-age').value) || 0;
   const height = parseFloat(document.getElementById('profile-height').value) || 0;
   const weight = parseFloat(document.getElementById('profile-weight').value) || 0;
@@ -3446,10 +3475,10 @@ function submitMyProfile(name) {
   const gender = window._profileGender;
   if (!gender || !age || !height || !weight) { alert('모든 항목을 입력해주세요!'); return; }
   const profile = { gender, age, height, weight, activity };
-  saveMyProfile(name, profile);
+  await saveMyProfile(name, profile);
   saveMyWeight(name, weight);
   closeModal();
-  render();
+  await loadAll(); render();
 }
 
 function openExercise() {
@@ -4353,7 +4382,7 @@ function renderHealthCard() {
   let html = '<div class="card" style="margin-top:0">';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">';
   html += '<div style="font-size:13px;font-weight:700;color:var(--muted)">🎯 오늘 권장칼로리 달성</div>';
-  if (view !== "all") {
+  if (view === myName) {
     html += '<button onclick="openMyProfile()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:800;padding:5px 10px;border-radius:8px">내 정보 설정</button>';
   }
   html += '</div>';
@@ -5143,7 +5172,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
