@@ -4148,14 +4148,21 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
           '</div></div>' +
           (backdatedDates.length > 0 ? '<div style="font-size:11px;color:#E0726A;font-weight:700;margin-top:2px">📅 ' + backdatedDates.join(', ') + ' 기록을 오늘 입력</div>' : '');
       } else {
-        let missDay = 1;
-        const d = new Date(); d.setDate(d.getDate() - 1);
-        while (missDay < 30) { if (entries.some(e => e.member === m.name && e.date === fmtKey(d))) break; missDay++; d.setDate(d.getDate()-1); }
-        const emoji2 = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
-        const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
-        html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + repBadgeTag(m.name) + esc(m.name) + '</span>' +
-          '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span></div>';
+        const hasAnyRecordEver = entries.some(e => e.member === m.name);
+        if (!hasAnyRecordEver) {
+          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<span style="font-size:14px;font-weight:700;color:var(--muted)">🌱 ' + repBadgeTag(m.name) + esc(m.name) + '</span>' +
+            '<span style="font-size:12px;font-weight:700;color:var(--faint)">아직 기록이 없어요</span></div>';
+        } else {
+          let missDay = 1;
+          const d = new Date(); d.setDate(d.getDate() - 1);
+          while (missDay < 30) { if (entries.some(e => e.member === m.name && e.date === fmtKey(d))) break; missDay++; d.setDate(d.getDate()-1); }
+          const emoji2 = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
+          const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
+          html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
+            '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + repBadgeTag(m.name) + esc(m.name) + '</span>' +
+            '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span></div>';
+        }
       }
     });
     html += '</div></div>';
