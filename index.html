@@ -3712,6 +3712,9 @@ function openSeasonMenu() {
       html += '<button onclick="confirmEndSeason()" style="flex:1;padding:14px;border-radius:14px;border:1px dashed #E0726A;background:transparent;color:#E0726A;font-size:14px;font-weight:800">시즌 종료</button>';
     }
     html += '</div>';
+    if (members.length === 0) {
+      html += '<button onclick="copyMembersFromPrevious()" style="width:100%;margin-top:8px;padding:12px;border-radius:14px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800">👥 이전 시즌 멤버 불러오기</button>';
+    }
     // D-day 설정
     const curMeetDate = seasons[currentSeasonId] && seasons[currentSeasonId].meetDate || meetDate || "";
     html += '<div style="margin-top:12px">';
@@ -3902,6 +3905,18 @@ async function endSeason(goalResults = {}) {
   await loadAll(); render();
 }
 
+async function copyMembersFromPrevious() {
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  const defaultMembers = await dbGet("members");
+  const prevMembers = Array.isArray(defaultMembers) ? defaultMembers : (defaultMembers ? Object.values(defaultMembers) : []);
+  if (!prevMembers.length) { alert("시즌1에도 멤버가 없어요."); return; }
+  if (!confirm(prevMembers.map(m => m.name).join(", ") + " 멤버를 이 시즌으로 불러올까요?")) return;
+  members = prevMembers;
+  await dbPut(seasonPath("members"), members);
+  closeModal();
+  await loadAll(); render();
+}
+
 function switchSeason(id, resetView = true) {
   currentSeasonId = id;
   if (resetView) view = "all";
@@ -3933,6 +3948,10 @@ async function submitNewSeason() {
   const season = { id, name, createdAt: Date.now(), ended: false };
   await dbPut("seasons/" + id, season);
   seasons[id] = season;
+  // 새 시즌에도 기존 멤버 목록 그대로 이어받기
+  if (members.length > 0) {
+    await dbPut("seasons/" + id + "/members", members);
+  }
   closeModal();
   switchSeason(id);
 }
@@ -5227,7 +5246,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, copyMembersFromPrevious, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
