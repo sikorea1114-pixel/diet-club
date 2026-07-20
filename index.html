@@ -3016,8 +3016,8 @@ function getCurrentSeasonLeaders() {
     .filter(m => m.recordDays > 0)
     .sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
 
-  // 최장 스트릭
-  const streakData = members.map(m => ({ name: m.name, streak: calcStreak(m.name) })).sort((a,b) => b.streak - a.streak);
+  // 최장 스트릭 (시즌 내내 통틀어 가장 길었던 연속 기록 — 현재 끊겼어도 인정)
+  const streakData = members.map(m => ({ name: m.name, streak: calcSeasonScore(m.name).bestStreakInSeason })).sort((a,b) => b.streak - a.streak);
 
   const leaders = {};
   if (mvpData.length) leaders.mvp = { name: mvpData[0].name, emoji: '👑', label: 'MVP', desc: mvpData[0].score + '점으로 1위' };
@@ -3768,8 +3768,8 @@ async function endSeason(goalResults = {}) {
     .sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
   if (mvpData.length) hall.mvp = { name: mvpData[0].name, days: mvpData[0].recordDays, score: mvpData[0].score };
 
-  // 최장 스트릭
-  const streakData = members.map(m => ({ name: m.name, streak: calcStreak(m.name) }))
+  // 최장 스트릭 (시즌 내내 통틀어 가장 길었던 연속 기록 — 현재 끊겼어도 인정)
+  const streakData = members.map(m => ({ name: m.name, streak: calcSeasonScore(m.name).bestStreakInSeason }))
     .sort((a,b) => b.streak - a.streak);
   if (streakData.length && streakData[0].streak > 0) hall.streak = { name: streakData[0].name, streak: streakData[0].streak };
 
