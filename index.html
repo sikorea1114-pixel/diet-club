@@ -245,6 +245,7 @@ let notices = {};
 let board = {}; // 익명 건의함
 let seasons = {};
 let currentSeasonId = "default";
+let defaultSeasonEnded = false; // 기본 시즌(시즌1) 종료 여부
 let date = new Date();
 let view = "all";
 let mode = "home";
@@ -358,7 +359,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd, dse] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -378,7 +379,8 @@ async function loadAll() {
     dbGet("representativeBadges"),
     dbGet("lifetimeTitles"),
     dbGet("badgeLog/" + fmtKey(new Date())),
-    dbGet(seasonPath("board"))
+    dbGet(seasonPath("board")),
+    dbGet("defaultSeasonEnded")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -389,6 +391,7 @@ async function loadAll() {
   pledges = pl || {};
   meetDate = md || "";
   hall = h || null;
+  defaultSeasonEnded = !!dse;
   exercises = ex ? Object.values(ex) : [];
   if (gk) geminiKey = gk;
   if (ac && Array.isArray(ac)) {
@@ -489,7 +492,7 @@ function render() {
   const isBoard = mode === "board";
   const isCommunity = isVote || isNotice || isMukbang || isAI || isBoard;
   const isRecord = !isCommunity && !isHome;
-  const isReadOnly = currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended;
+  const isReadOnly = (currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended) || (currentSeasonId === "default" && defaultSeasonEnded);
 
   // 오늘 새 공지/투표 있는지 체크 (레드닷)
   const todayKey = fmtKey(new Date());
@@ -529,7 +532,7 @@ function render() {
   const currentSeasonName = currentSeasonId === "default"
     ? "시즌 1"
     : (seasons[currentSeasonId] ? seasons[currentSeasonId].name : "시즌");
-  const isCurrentSeason = currentSeasonId === "default" || (seasons[currentSeasonId] && !seasons[currentSeasonId].ended);
+  const isCurrentSeason = (currentSeasonId === "default" && !defaultSeasonEnded) || (seasons[currentSeasonId] && !seasons[currentSeasonId].ended);
   html += '<div style="display:flex;align-items:center;gap:6px">';
   html += '<button onclick="doLogout()" style="border:none;background:transparent;color:var(--faint);font-size:11px;font-weight:700;padding:4px 2px">👤 ' + esc(myName) + '</button>';
   html += '<button onclick="openSeasonMenu()" style="display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 12px;font-size:12px;font-weight:700;color:var(--muted)">' +
@@ -3609,7 +3612,7 @@ async function submitEditExercise(id) {
 function openSeasonMenu() {
   const m = document.getElementById("modal");
   const seasonList = [
-    { id: "default", name: "시즌 1", ended: false },
+    { id: "default", name: "시즌 1", ended: defaultSeasonEnded },
     ...Object.values(seasons).sort((a,b) => a.createdAt - b.createdAt)
   ];
 
@@ -3724,6 +3727,9 @@ async function submitEndSeason() {
 }
 
 async function endSeason(goalResults = {}) {
+  if (currentSeasonId === "default" && defaultSeasonEnded) { alert("이미 종료된 시즌이에요!"); return; }
+  if (currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended) { alert("이미 종료된 시즌이에요!"); return; }
+
   // 명예의 전당 계산
   const hall = {};
 
@@ -3796,6 +3802,8 @@ async function endSeason(goalResults = {}) {
   // Firebase에 저장
   if (currentSeasonId === "default") {
     await dbPut("hall", hall);
+    await dbPut("defaultSeasonEnded", true);
+    defaultSeasonEnded = true;
   } else {
     await dbPut("seasons/" + currentSeasonId + "/hall", hall);
     await dbPut("seasons/" + currentSeasonId + "/ended", true);
