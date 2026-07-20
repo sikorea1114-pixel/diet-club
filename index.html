@@ -1144,6 +1144,8 @@ async function doLogout() {
   await auth.signOut();
 }
 
+let autoSeasonPicked = false; // 진입 시 진행 중인 시즌 자동 선택 (최초 1회만)
+
 async function start() {
   if (!DB_URL) { renderSetup(); return; }
   render();
@@ -1153,6 +1155,20 @@ async function start() {
     if (!loaded) { loaded = true; render(); }
     return;
   }
+
+  // 시즌1이 종료된 상태로 앱에 진입했으면, 진행 중인 시즌으로 자동 이동 (최초 1회만)
+  if (!autoSeasonPicked) {
+    autoSeasonPicked = true;
+    if (currentSeasonId === "default" && defaultSeasonEnded) {
+      const activeSeasons = Object.entries(seasons || {}).filter(([id, s]) => s && !s.ended);
+      if (activeSeasons.length > 0) {
+        activeSeasons.sort((a,b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+        switchSeason(activeSeasons[0][0]);
+        return;
+      }
+    }
+  }
+
   if (pollTimer) clearInterval(pollTimer);
   pollTimer = setInterval(async () => {
     if (!currentUser) { clearInterval(pollTimer); pollTimer = null; return; } // 로그아웃 상태면 폴링 중단
