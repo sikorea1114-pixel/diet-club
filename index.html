@@ -1170,7 +1170,7 @@ async function start() {
       const activeSeasons = Object.entries(seasons || {}).filter(([id, s]) => s && !s.ended);
       if (activeSeasons.length > 0) {
         activeSeasons.sort((a,b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
-        switchSeason(activeSeasons[0][0]);
+        switchSeason(activeSeasons[0][0], false); // 자동 전환은 view(내 이름 선택) 유지
         return;
       }
     }
@@ -3274,6 +3274,16 @@ async function grantLifetimeTitle(name, emoji, label) {
 }
 
 
+// 지난 시즌 타이틀 이모지를 라벨 기준으로 항상 최신값으로 계산 (저장된 값에 의존하지 않음)
+function getTitleEmoji(label) {
+  if (label.endsWith(' MVP')) return '🏆';
+  if (label.endsWith(' 최장 스트릭')) return '⚡';
+  if (label.endsWith(' 먹방왕')) return '🍔';
+  if (label.endsWith(' 운동왕')) return '🏋️';
+  if (label.endsWith(' 건강왕')) return '🍃';
+  return '🏅';
+}
+
 function getAllAchievedBadges(name) {
   const list = [];
   getCurrentSeasonBadgesFor(name).forEach(b => {
@@ -3286,7 +3296,7 @@ function getAllAchievedBadges(name) {
     if (b.owner === name) list.push({ key: 'hidden:' + b.key, emoji: b.emoji, name: b.name });
   });
   (lifetimeTitles[name] || []).forEach((t, i) => {
-    list.push({ key: 'title:' + i + ':' + t.awardedAt, emoji: t.emoji, name: t.label });
+    list.push({ key: 'title:' + i + ':' + t.awardedAt, emoji: getTitleEmoji(t.label), name: t.label });
   });
   return list;
 }
@@ -3365,7 +3375,7 @@ function openBadgeCollection() {
     } else {
       html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px">';
       titles.slice().reverse().forEach(t => {
-        html += '<span style="border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700">' + t.emoji + ' ' + esc(t.label) + '</span>';
+        html += '<span style="border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:6px 12px;font-size:12px;font-weight:700">' + getTitleEmoji(t.label) + ' ' + esc(t.label) + '</span>';
       });
       html += '</div>';
     }
@@ -3892,9 +3902,9 @@ async function endSeason(goalResults = {}) {
   await loadAll(); render();
 }
 
-function switchSeason(id) {
+function switchSeason(id, resetView = true) {
   currentSeasonId = id;
-  view = "all";
+  if (resetView) view = "all";
   members = []; entries = []; polls = {}; notices = {}; loaded = false;
   closeModal();
   start();
