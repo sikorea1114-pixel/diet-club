@@ -561,7 +561,7 @@ function render() {
     '<span class="bnav-icon">' + svgHome + '</span>홈</button>' +
     '<button class="' + (isRecord?"on":"") + '" onclick="setMode(\'day\')">' +
     '<span class="bnav-icon">' + svgRecord + '</span>기록</button>' +
-    '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'vote\')" style="position:relative">' +
+    '<button class="' + (isCommunity?"on":"") + '" onclick="setMode(\'notice\')" style="position:relative">' +
     '<span class="bnav-icon">' + svgChat + '</span>커뮤니티' +
     (hasNewCommunity ? '<span style="position:absolute;top:4px;left:50%;transform:translateX(4px);width:7px;height:7px;background:#E0726A;border-radius:99px"></span>' : '') +
     '</button></div>';
@@ -641,7 +641,10 @@ function render() {
     // 명예의 전당 (종료된 시즌)
     if (isReadOnly && hall) {
       html += '<div class="card" style="margin-top:0">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
       html += '<div class="sub">🏆 명예의 전당</div>';
+      if (myName === "이성호") html += '<button onclick="recalcHallOfFame()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:11px;font-weight:700;padding:4px 8px;border-radius:8px">🔄 재계산</button>';
+      html += '</div>';
       html += '<div style="display:flex;flex-direction:column;gap:12px;margin-top:12px">';
       if (hall.mvp) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span style="font-size:14px;color:var(--muted);font-weight:700">👑 시즌 MVP</span>' +
@@ -661,6 +664,25 @@ function render() {
       if (hall.healthKing) html += '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<span style="font-size:14px;color:var(--muted);font-weight:700">🥗 건강왕</span>' +
         '<span style="font-size:15px;font-weight:800">' + esc(hall.healthKing.name) + ' <span style="color:var(--muted);font-size:12px">' + hall.healthKing.score + '점</span></span></div>';
+      if (hall.scoreRanking && hall.scoreRanking.length > 0) {
+        html += '<div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">';
+        html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:10px">⭐ 시즌 다이어트 점수 순위</div>';
+        const rkMedals = ['🥇','🥈','🥉'];
+        const maxScore = Math.max(1, ...hall.scoreRanking.map(r => r.score));
+        html += '<div style="display:flex;flex-direction:column;gap:8px">';
+        hall.scoreRanking.forEach((r, i) => {
+          const pct = Math.max(0, Math.round(r.score / maxScore * 100));
+          const medal = rkMedals[i] || (i+1) + '위';
+          html += '<div>';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+            '<span style="font-size:13px;font-weight:700">' + medal + ' ' + esc(r.name) + '</span>' +
+            '<span style="font-size:13px;font-weight:800;color:var(--accent)">' + r.score + '점</span></div>';
+          html += '<div style="height:6px;background:var(--bg);border-radius:99px;overflow:hidden">' +
+            '<div style="height:100%;width:' + pct + '%;background:' + (i===0?'var(--accent)':colorOf(r.name)) + ';border-radius:99px"></div></div>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+      }
       if (hall.goals && hall.goals.length > 0) {
         html += '<div style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px">';
         html += '<div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">🎯 시즌 목표</div>';
@@ -3802,6 +3824,29 @@ async function submitEndSeason() {
   await endSeason(window._goalResults || {});
 }
 
+// 이성호 전용: 이미 종료된 시즌의 명예의 전당만 다시 계산 (배지/타이틀 재부여 없이 안전하게 hall만 갱신)
+async function recalcHallOfFame() {
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  if (!confirm("이 시즌의 명예의 전당(순위표)을 현재 기록 기준으로 다시 계산할까요?")) return;
+
+  const mvpData = members.map(m => calcSeasonScore(m.name))
+    .filter(m => m.recordDays > 0)
+    .sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
+  const newHall = { ...(hall || {}) };
+  if (mvpData.length) newHall.mvp = { name: mvpData[0].name, days: mvpData[0].recordDays, score: mvpData[0].score };
+  newHall.scoreRanking = mvpData.map(m => ({ name: m.name, score: m.score, recordDays: m.recordDays, exDays: m.exDays }));
+
+  if (currentSeasonId === "default") {
+    await dbPut("hall", newHall);
+  } else {
+    await dbPut("seasons/" + currentSeasonId + "/hall", newHall);
+    if (seasons[currentSeasonId]) seasons[currentSeasonId].hall = newHall;
+  }
+  hall = newHall;
+  alert("명예의 전당을 갱신했어요! 🏆");
+  render();
+}
+
 async function endSeason(goalResults = {}) {
   if (currentSeasonId === "default" && defaultSeasonEnded) { alert("이미 종료된 시즌이에요!"); return; }
   if (currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended) { alert("이미 종료된 시즌이에요!"); return; }
@@ -3814,6 +3859,8 @@ async function endSeason(goalResults = {}) {
     .filter(m => m.recordDays > 0)
     .sort((a,b) => b.score !== a.score ? b.score - a.score : a.totalKcal - b.totalKcal);
   if (mvpData.length) hall.mvp = { name: mvpData[0].name, days: mvpData[0].recordDays, score: mvpData[0].score };
+  // 전체 멤버 시즌 다이어트 점수 순위 (1등~꼴등 전체 보관)
+  hall.scoreRanking = mvpData.map(m => ({ name: m.name, score: m.score, recordDays: m.recordDays, exDays: m.exDays }));
 
   // 최장 스트릭 (시즌 내내 통틀어 가장 길었던 연속 기록 — 현재 끊겼어도 인정)
   const streakData = members.map(m => ({ name: m.name, streak: calcSeasonScore(m.name).bestStreakInSeason }))
@@ -5246,7 +5293,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, copyMembersFromPrevious, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, copyMembersFromPrevious, recalcHallOfFame, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
