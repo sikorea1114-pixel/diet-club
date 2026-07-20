@@ -364,7 +364,7 @@ async function loadAll() {
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
-    dbGet(seasonPath("notices")),
+    dbGet("notices"),
     dbGet("seasons"),
     dbGet(seasonPath("pledges")),
     currentSeasonId === "default" ? dbGet("meetDate") : dbGet("seasons/" + currentSeasonId + "/meetDate"),
@@ -3141,15 +3141,13 @@ async function recalcLifetimeStats() {
     const entriesPath = sid === "default" ? "entries" : "seasons/" + sid + "/entries";
     const exercisesPath = sid === "default" ? "exercises" : "seasons/" + sid + "/exercises";
     const pollsPath = sid === "default" ? "polls" : "seasons/" + sid + "/polls";
-    const noticesPath = sid === "default" ? "notices" : "seasons/" + sid + "/notices";
     const hallPath = sid === "default" ? "hall" : "seasons/" + sid + "/hall";
-    const [e, ex, p, n, h] = await Promise.all([
-      dbGet(entriesPath), dbGet(exercisesPath), dbGet(pollsPath), dbGet(noticesPath), dbGet(hallPath)
+    const [e, ex, p, h] = await Promise.all([
+      dbGet(entriesPath), dbGet(exercisesPath), dbGet(pollsPath), dbGet(hallPath)
     ]);
     const eArr = e ? Object.values(e) : [];
     const exArr = ex ? Object.values(ex) : [];
     const pArr = p ? Object.values(p) : [];
-    const nArr = n ? Object.values(n) : [];
     eArr.forEach(en => {
       allEntries.push(en);
       if (!participatedSeasons[en.member]) participatedSeasons[en.member] = new Set();
@@ -3157,9 +3155,11 @@ async function recalcLifetimeStats() {
     });
     exArr.forEach(exn => allExercises.push(exn));
     pArr.forEach(pn => allPolls.push(pn));
-    nArr.forEach(nn => allNotices.push(nn));
     if (h && h.goals) h.goals.forEach(g => allGoals.push(g));
   }
+  // 공지는 이제 시즌 무관 공용 데이터라 한 번만 가져옴
+  const n = await dbGet("notices");
+  if (n) Object.values(n).forEach(nn => allNotices.push(nn));
 
   for (const m of members) {
     const name = m.name;
@@ -4926,7 +4926,7 @@ async function submitNewNotice() {
   const id = "notice-" + Date.now();
   const notice = { id, title, content, author, date: fmtKey(new Date()), createdAt: Date.now() };
   notices[id] = notice;
-  await dbPut(seasonPath("notices") + "/" + id, notice);
+  await dbPut("notices" + "/" + id, notice);
   await bumpLifetimeStat(author, "noticeCount", 1);
   closeModal();
   await loadAll(); render();
@@ -4947,7 +4947,7 @@ async function submitPledge() {
 async function deleteNotice(id) {
   if (!confirm("이 글을 삭제할까요?")) return;
   delete notices[id];
-  await dbDelete(seasonPath("notices") + "/" + id);
+  await dbDelete("notices" + "/" + id);
   await loadAll(); render();
 }
 
@@ -5047,8 +5047,8 @@ async function submitEditNotice(id) {
   btn.disabled = true;
   notices[id].title = title;
   notices[id].content = newContent;
-  await dbPut(seasonPath("notices") + "/" + id + "/title", title);
-  await dbPut(seasonPath("notices") + "/" + id + "/content", newContent);
+  await dbPut("notices" + "/" + id + "/title", title);
+  await dbPut("notices" + "/" + id + "/content", newContent);
   closeModal();
   await loadAll(); render();
 }
