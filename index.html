@@ -3091,8 +3091,16 @@ async function logBadgeAchievement(name, emoji, badgeName, isHidden) {
 // 이성호 전용: 중복 부여된 시즌 타이틀 정리 (같은 라벨 중복 → 1개만 남김)
 async function dedupeLifetimeTitles() {
   if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
-  if (!confirm("중복으로 쌓인 시즌 타이틀을 정리할까요? (같은 타이틀은 1개만 남겨요)")) return;
+  if (!confirm("중복 타이틀 정리 + 이모지를 최신으로 갱신할까요?")) return;
+  const emojiMap = [
+    { match: " MVP", emoji: "🏆" },
+    { match: " 최장 스트릭", emoji: "⚡" },
+    { match: " 먹방왕", emoji: "🍔" },
+    { match: " 운동왕", emoji: "🏋️" },
+    { match: " 건강왕", emoji: "🍃" }
+  ];
   let totalRemoved = 0;
+  let totalEmojiFixed = 0;
   for (const name of Object.keys(lifetimeTitles)) {
     const titles = lifetimeTitles[name] || [];
     const seen = new Set();
@@ -3100,17 +3108,20 @@ async function dedupeLifetimeTitles() {
     titles.forEach(t => {
       if (!seen.has(t.label)) {
         seen.add(t.label);
+        // 이모지 최신화
+        const rule = emojiMap.find(r => t.label.endsWith(r.match));
+        if (rule && t.emoji !== rule.emoji) { t = { ...t, emoji: rule.emoji }; totalEmojiFixed++; }
         deduped.push(t);
       } else {
         totalRemoved++;
       }
     });
-    if (deduped.length !== titles.length) {
+    if (deduped.length !== titles.length || JSON.stringify(deduped) !== JSON.stringify(titles)) {
       lifetimeTitles[name] = deduped;
       await dbPut("lifetimeTitles/" + encodeURIComponent(name), deduped);
     }
   }
-  alert(totalRemoved + "개의 중복 타이틀을 정리했어요! 🧹");
+  alert("중복 " + totalRemoved + "개 정리, 이모지 " + totalEmojiFixed + "개 갱신했어요! 🧹");
   render();
 }
 
@@ -3872,11 +3883,11 @@ async function endSeason(goalResults = {}) {
   const seasonLabel = currentSeasonId === "default"
     ? "시즌 1"
     : (seasons[currentSeasonId] ? seasons[currentSeasonId].name : "시즌");
-  if (hall.mvp) await grantLifetimeTitle(hall.mvp.name, '👑', seasonLabel + ' MVP');
-  if (hall.streak) await grantLifetimeTitle(hall.streak.name, '🔥', seasonLabel + ' 최장 스트릭');
-  if (hall.mukbangKing) await grantLifetimeTitle(hall.mukbangKing.name, '🍽️', seasonLabel + ' 먹방왕');
-  if (hall.exerciseKing) await grantLifetimeTitle(hall.exerciseKing.name, '💪', seasonLabel + ' 운동왕');
-  if (hall.healthKing) await grantLifetimeTitle(hall.healthKing.name, '🥗', seasonLabel + ' 건강왕');
+  if (hall.mvp) await grantLifetimeTitle(hall.mvp.name, '🏆', seasonLabel + ' MVP');
+  if (hall.streak) await grantLifetimeTitle(hall.streak.name, '⚡', seasonLabel + ' 최장 스트릭');
+  if (hall.mukbangKing) await grantLifetimeTitle(hall.mukbangKing.name, '🍔', seasonLabel + ' 먹방왕');
+  if (hall.exerciseKing) await grantLifetimeTitle(hall.exerciseKing.name, '🏋️', seasonLabel + ' 운동왕');
+  if (hall.healthKing) await grantLifetimeTitle(hall.healthKing.name, '🍃', seasonLabel + ' 건강왕');
 
   await loadAll(); render();
 }
