@@ -449,7 +449,14 @@ async function removeEntry(id) {
 }
 function shiftDay(d) { const x = new Date(date); x.setDate(x.getDate()+d); date = x; render(); }
 function shiftMonth(d) { date = new Date(date.getFullYear(), date.getMonth()+d, 1); render(); }
-function setMode(m) { mode = m; render(); }
+function scrollAIToBottom() {
+  setTimeout(() => { const box = document.getElementById("ai-chat-box"); if (box) box.scrollIntoView({ behavior: "smooth", block: "end" }); }, 100);
+}
+function setMode(m) {
+  mode = m;
+  render();
+  if (m === "ai") scrollAIToBottom();
+}
 function setView(v) {
   view = v;
   const chips = document.querySelector(".chips");
@@ -1180,7 +1187,7 @@ async function start() {
     if (document.activeElement && document.activeElement.tagName === "SELECT") return;
     if (document.activeElement && document.activeElement.id === "ai-input") return;
     if (mode === "history") return; // 역대 랭킹 보는 중엔 폴링 스킵
-    try { await loadAll(); render(); } catch (e) {}
+    try { await loadAll(); render(); if (mode === "ai") scrollAIToBottom(); } catch (e) {}
   }, 5000);
 }
 function resetDb() {
@@ -4000,6 +4007,9 @@ async function autoSaveLastWeek() {
 }
 
 async function forceResaveLastWeek() {
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  const isEndedSeason = (currentSeasonId === "default" && defaultSeasonEnded) || (currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended);
+  if (isEndedSeason) { alert("종료된 시즌은 재저장할 수 없어요!"); return; }
   const today = new Date();
   const lastWeekDate = new Date(today);
   lastWeekDate.setDate(today.getDate() - 7);
@@ -4011,16 +4021,17 @@ async function forceResaveLastWeek() {
   await loadAll(); render();
 }
 function renderWeeklyHistoryHtml() {
+  const isEndedSeason = (currentSeasonId === "default" && defaultSeasonEnded) || (currentSeasonId !== "default" && seasons[currentSeasonId] && seasons[currentSeasonId].ended);
   const records = Object.values(weeklyRecords).sort((a,b) => b.weekKey.localeCompare(a.weekKey));
   let html = '<div class="list" style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
   if (records.length === 0) {
     html += '<div class="empty">아직 지난 주 기록이 없어요.<br>다음 주 월요일에 자동 저장돼요!</div>';
-    if (myName === "이성호") html += '<div style="text-align:center;margin-top:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:10px 20px;border-radius:12px">🔄 지난 주 기록 저장</button></div>';
+    if (myName === "이성호" && !isEndedSeason) html += '<div style="text-align:center;margin-top:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:10px 20px;border-radius:12px">🔄 지난 주 기록 저장</button></div>';
     html += '</div>';
     return html;
   }
-  // 이성호 전용 재저장 버튼
-  if (myName === "이성호") {
+  // 이성호 전용 재저장 버튼 (진행 중인 시즌에서만 — 종료된 시즌은 재저장 의미 없음)
+  if (myName === "이성호" && !isEndedSeason) {
     html += '<div style="text-align:center;margin-bottom:12px"><button onclick="forceResaveLastWeek()" style="border:none;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:800;padding:8px 16px;border-radius:10px">🔄 지난 주 기록 재저장</button></div>';
   }
   const medals = ['🥇','🥈','🥉'];
