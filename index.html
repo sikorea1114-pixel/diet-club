@@ -3340,7 +3340,12 @@ function isRepBadgeValid(name, rep) {
     const label = rep.key.slice('season:'.length);
     return getCurrentSeasonBadgesFor(name).some(b => b.label === label);
   }
-  return true; // 평생 배지 / 히든 배지 / 시즌 타이틀은 영구
+  if (rep.key && rep.key.startsWith('lifetime:')) {
+    // 평생 배지는 통계가 나중에 재계산되어 조건을 못 채울 수도 있으니 매번 실시간 검증
+    const badgeName = rep.key.slice('lifetime:'.length);
+    return getLifetimeBadgeCatalog(name).some(b => b.name === badgeName && b.achieved);
+  }
+  return true; // 히든 배지 / 지난 시즌 타이틀은 한 번 받으면 영구
 }
 
 // 대표 배지 설정/해제
