@@ -3235,13 +3235,13 @@ async function recalcLifetimeStats() {
       ...prevStats,
       totalEntries,
       totalExercises,
-      bestStreak: Math.max(best, prevStats.bestStreak || 0),
+      bestStreak: Math.max(best, prevStats.bestStreak || 0), // 스트릭은 시즌 넘어 유지되는 값이라 최고치 보존
       seasonsCount,
-      morningMeals: Math.max(morningMeals, prevStats.morningMeals || 0),
-      nightMeals: Math.max(nightMeals, prevStats.nightMeals || 0),
-      voteCount: Math.max(voteCount, prevStats.voteCount || 0),
-      noticeCount: Math.max(noticeCount, prevStats.noticeCount || 0),
-      goalSuccessCount: Math.max(goalSuccessCount, prevStats.goalSuccessCount || 0)
+      morningMeals,
+      nightMeals,
+      voteCount,
+      noticeCount,
+      goalSuccessCount
     };
     await dbPut("lifetimeStats/" + encodeURIComponent(name), lifetimeStats[name]);
     await checkFirstAchievers(name);
@@ -4837,9 +4837,17 @@ async function sendAIMessage() {
       // 현재 스트릭
       const streak = calcStreak(view);
 
-      // 시즌 전체 누적
+      // 시즌 전체 누적 (현재 보고 있는 시즌)
       const seasonInfo = calcSeasonScore(view);
       const avgKcal = seasonInfo.recordDays > 0 ? Math.round(seasonInfo.totalKcal / seasonInfo.recordDays) : 0;
+
+      // 평생 누적 통계 (시즌 무관, 전체 기간)
+      const ls2 = lifetimeStats[view] || {};
+      const lifetimeInfo = "누적 기록 " + (ls2.totalEntries || 0) + "회 / 누적 운동 " + (ls2.totalExercises || 0) + "회 / 역대 최고 스트릭 " + (ls2.bestStreak || 0) + "일 / 참여 시즌 " + (ls2.seasonsCount || 0) + "개";
+
+      // 지난 시즌 타이틀 (과거 시즌에서 받은 것 전부)
+      const pastTitles = lifetimeTitles[view] || [];
+      const titlesText = pastTitles.length > 0 ? pastTitles.map(t => t.label).join(", ") : "없음";
 
       systemCtx = "당신은 친근한 다이어트 상담 AI예요. 5명이 함께하는 다이어트 모임 앱에서 사용돼요.\n" +
         "현재 사용자: " + view + "\n" +
@@ -4847,8 +4855,9 @@ async function sendAIMessage() {
         "오늘 먹은 것: " + foods + "\n" +
         "최근 7일 추이: " + dailyTrend + "\n" +
         "현재 연속 기록 스트릭: " + streak + "일\n" +
-        "이번 시즌 전체: " + seasonInfo.recordDays + "일 기록 / 하루 평균 " + avgKcal + "kcal / 운동 " + seasonInfo.exDays + "일 / 시즌 점수 " + seasonInfo.score + "점\n" +
-        "이전 대화 맥락이나 과거 질문은 기억하지 못하니, 필요한 과거 데이터는 위 요약을 참고해서 답변해요.\n" +
+        "이번 시즌(현재 보고 있는 시즌) 전체: " + seasonInfo.recordDays + "일 기록 / 하루 평균 " + avgKcal + "kcal / 운동 " + seasonInfo.exDays + "일 / 시즌 점수 " + seasonInfo.score + "점\n" +
+        "평생 누적(모든 시즌 통틀어): " + lifetimeInfo + "\n" +
+        "지난 시즌 타이틀: " + titlesText + "\n" +
         "짧고 친근하게 한국어로 답변해요. 이모지 적절히 사용해요.\n\n";
     }
   }
