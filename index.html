@@ -5046,7 +5046,34 @@ function renderBoardHtml() {
       if (myName === "이성호" || post.author === myName) {
         html += '<button onclick="deleteBoardPost(\'' + post.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:12px;font-weight:700;padding:2px 4px">삭제</button>';
       }
-      html += '</div></div>';
+      html += '</div>';
+
+      // 댓글 목록
+      const comments = post.comments ? Object.values(post.comments).sort((a,b) => a.createdAt - b.createdAt) : [];
+      if (comments.length > 0) {
+        html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">';
+        comments.forEach(c => {
+          const isAdmin = c.author === "이성호";
+          const label = isAdmin ? '<span style="color:var(--accent);font-weight:800">🛠️ 이성호</span>' : boardAuthorLabel(c.author);
+          html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;background:var(--bg);border-radius:10px;padding:8px 12px">';
+          html += '<div style="flex:1"><div style="font-size:12px;font-weight:700;margin-bottom:2px">' + label + '</div>' +
+            '<div style="font-size:13px;color:var(--ink);white-space:pre-wrap">' + esc(c.content) + '</div></div>';
+          if (myName === "이성호" || c.author === myName) {
+            html += '<button onclick="deleteBoardComment(\'' + post.id + '\',\'' + c.id + '\')" style="border:none;background:transparent;color:var(--faint);font-size:11px;font-weight:700;padding:2px 4px;flex-shrink:0">삭제</button>';
+          }
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      // 댓글 입력
+      if (myName) {
+        html += '<div style="display:flex;gap:6px;margin-top:10px">' +
+          '<input class="ti" id="comment-input-' + post.id + '" placeholder="댓글 달기 (예: 처리 완료했어요!)" style="flex:1;margin:0;font-size:13px;padding:10px 12px" onkeydown="if(event.key===\'Enter\')submitBoardComment(\'' + post.id + '\')" />' +
+          '<button onclick="submitBoardComment(\'' + post.id + '\')" style="padding:0 14px;border-radius:12px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:800">등록</button>' +
+          '</div>';
+      }
+      html += '</div>';
     });
   }
   html += '</div>';
@@ -5088,6 +5115,32 @@ async function deleteBoardPost(id) {
   if (!confirm("이 글을 삭제할까요?")) return;
   delete board[id];
   await dbDelete(seasonPath("board") + "/" + id);
+  await loadAll(); render();
+}
+
+async function submitBoardComment(postId) {
+  if (!myName) { alert("로그인 후 이용해주세요."); return; }
+  const input = document.getElementById("comment-input-" + postId);
+  if (!input) return;
+  const content = input.value.trim();
+  if (!content) return;
+  const post = board[postId];
+  if (!post) return;
+  const commentId = "c-" + Date.now();
+  const comment = { id: commentId, author: myName, content, createdAt: Date.now() };
+  if (!post.comments) post.comments = {};
+  post.comments[commentId] = comment;
+  await dbPut(seasonPath("board") + "/" + postId + "/comments/" + commentId, comment);
+  await loadAll(); render();
+}
+
+async function deleteBoardComment(postId, commentId) {
+  const post = board[postId];
+  if (!post || !post.comments || !post.comments[commentId]) return;
+  const comment = post.comments[commentId];
+  if (myName !== "이성호" && comment.author !== myName) { alert("본인이 쓴 댓글만 삭제할 수 있어요."); return; }
+  delete post.comments[commentId];
+  await dbDelete(seasonPath("board") + "/" + postId + "/comments/" + commentId);
   await loadAll(); render();
 }
 
@@ -5297,7 +5350,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, copyMembersFromPrevious, recalcHallOfFame, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, copyMembersFromPrevious, recalcHallOfFame, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost, submitBoardComment, deleteBoardComment });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
