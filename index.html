@@ -360,7 +360,7 @@ async function dbDelete(path) {
   await fetch(DB_URL + "/" + path + ".json", { method: "DELETE" });
 }
 async function loadAll() {
-  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd, dse, pr] = await Promise.all([
+  const [m, e, p, n, s, pl, md, h, ex, gk, ac, wr2, wn, tb, ls, fa, rb, lt, bl, bd, dse, pr, acp] = await Promise.all([
     dbGet(seasonPath("members")),
     dbGet(seasonPath("entries")),
     dbGet(seasonPath("polls")),
@@ -382,7 +382,8 @@ async function loadAll() {
     dbGet("badgeLog/" + fmtKey(new Date())),
     dbGet(seasonPath("board")),
     dbGet("defaultSeasonEnded"),
-    dbGet("profiles")
+    dbGet("profiles"),
+    dbGet("aiChatPersonal")
   ]);
   members = Array.isArray(m) ? m : (m ? Object.values(m) : []);
   entries = e ? Object.values(e) : [];
@@ -399,6 +400,15 @@ async function loadAll() {
   if (gk) geminiKey = gk;
   if (ac && Array.isArray(ac)) {
     aiHistories["all"] = ac.map(m => ({ role: m.role, parts: [{ text: m.text }], displayText: m.text }));
+  }
+  if (acp) {
+    Object.keys(acp).forEach(encodedName => {
+      const nameKey = decodeURIComponent(encodedName);
+      const msgs = acp[encodedName];
+      if (Array.isArray(msgs)) {
+        aiHistories[nameKey] = msgs.map(mm => ({ role: mm.role, parts: [{ text: mm.text }], displayText: mm.text }));
+      }
+    });
   }
   weeklyRecords = wr2 || {};
   warnings = wn || {};
@@ -4676,9 +4686,7 @@ async function removeThumb(name) {
   await dbPut(seasonPath("thumbs") + "/" + name, cur);
   await loadAll(); render();
 }
-let aiHistories = (function() {
-  try { return JSON.parse(localStorage.getItem("dietclub_ai_histories") || "{}"); } catch { return {}; }
-})();
+let aiHistories = {};
 let aiTyping = false;
 
 function getAiHistory() {
@@ -4689,13 +4697,9 @@ function getAiHistory() {
 async function setAiHistory(msgs) {
   const key = view || "all";
   aiHistories[key] = msgs;
-  if (key === "all") {
-    // 전체 대화는 Firebase에 저장
-    try { await dbPut("aiChat", msgs.map(m => ({ role: m.role, text: m.displayText || m.parts[0].text }))); } catch {}
-  } else {
-    // 개인 대화는 localStorage에 저장
-    try { localStorage.setItem("dietclub_ai_histories", JSON.stringify(aiHistories)); } catch {}
-  }
+  // 개인/전체 대화 모두 Firebase에 저장 (기기 무관, 시즌 무관하게 계속 기억됨)
+  const path = key === "all" ? "aiChat" : "aiChatPersonal/" + encodeURIComponent(key);
+  try { await dbPut(path, msgs.map(m => ({ role: m.role, text: m.displayText || m.parts[0].text }))); } catch {}
 }
 
 let geminiKey = "";
