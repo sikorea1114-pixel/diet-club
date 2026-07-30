@@ -3157,6 +3157,20 @@ async function dedupeLifetimeTitles() {
   render();
 }
 
+// 이성호 전용: 히든 배지(원조 시리즈) 조건 재검사 - 놓친 달성자 있으면 지금 바로 부여
+async function recheckHiddenBadges() {
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  if (!confirm("히든 배지 조건을 다시 검사해서, 놓친 달성자가 있으면 지금 부여할까요?")) return;
+  let grantedAny = false;
+  for (const m of members) {
+    const before = { ...firstAchievers };
+    await checkFirstAchievers(m.name);
+    if (JSON.stringify(before) !== JSON.stringify(firstAchievers)) grantedAny = true;
+  }
+  alert(grantedAny ? "놓쳤던 히든 배지를 부여했어요! 🎉" : "이미 정상 상태예요. 놓친 달성자가 없어요.");
+  render();
+}
+
 async function recalcLifetimeStats() {
   if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
   if (!confirm("지금까지의 모든 기록을 기준으로 배지 진행률을 다시 계산할까요?\n(사진왕/AI친구는 과거 사용 기록이 없어서 지금부터만 반영돼요)")) return;
@@ -3372,7 +3386,8 @@ function openBadgeCollection() {
 
   if (myName === "이성호") {
     html += '<button onclick="recalcLifetimeStats()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">🔄 지금까지의 기록 반영하기</button>';
-    html += '<button onclick="dedupeLifetimeTitles()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed #E0726A;background:#FDF0EF;color:#E0726A;font-size:12px;font-weight:700">🧹 중복 시즌 타이틀 정리하기</button>';
+    html += '<button onclick="dedupeLifetimeTitles()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:12px;border:1px dashed #E0726A;background:#FDF0EF;color:#E0726A;font-size:12px;font-weight:700">🧹 중복 시즌 타이틀 정리하기</button>';
+    html += '<button onclick="recheckHiddenBadges()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:var(--bg);color:var(--muted);font-size:12px;font-weight:700">🔒 히든 배지 놓친 달성자 재검사</button>';
   }
 
   if (members.length > 1) {
@@ -5365,7 +5380,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, copyMembersFromPrevious, recalcHallOfFame, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost, submitBoardComment, deleteBoardComment });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, recheckHiddenBadges, copyMembersFromPrevious, recalcHallOfFame, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost, submitBoardComment, deleteBoardComment });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
