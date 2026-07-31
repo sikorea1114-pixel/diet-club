@@ -3454,7 +3454,8 @@ function openBadgeCollection() {
   if (myName === "이성호") {
     html += '<button onclick="recalcLifetimeStats()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">🔄 지금까지의 기록 반영하기</button>';
     html += '<button onclick="dedupeLifetimeTitles()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:12px;border:1px dashed #E0726A;background:#FDF0EF;color:#E0726A;font-size:12px;font-weight:700">🧹 중복 시즌 타이틀 정리하기</button>';
-    html += '<button onclick="recheckHiddenBadges()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:var(--bg);color:var(--muted);font-size:12px;font-weight:700">🔒 히든 배지 놓친 달성자 재검사</button>';
+    html += '<button onclick="recheckHiddenBadges()" style="width:100%;margin-bottom:8px;padding:10px;border-radius:12px;border:1px dashed var(--faint);background:var(--bg);color:var(--muted);font-size:12px;font-weight:700">🔒 히든 배지 놓친 달성자 재검사</button>';
+    html += '<button onclick="backfillCumulativeScore()" style="width:100%;margin-bottom:14px;padding:10px;border-radius:12px;border:1px dashed var(--accent);background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:700">📈 지난 시즌 점수 레벨에 반영하기</button>';
   }
 
   if (members.length > 1) {
@@ -3462,6 +3463,20 @@ function openBadgeCollection() {
     members.forEach(mb => {
       html += '<button onclick="closeModal();view=\'' + esc(mb.name) + '\';openBadgeCollection()" style="' + (mb.name === targetName ? 'border-color:var(--accent);background:var(--accent-soft);color:var(--accent)' : '') + '"><span class="d" style="background:' + colorOf(mb.name) + '"></span>' + esc(mb.name) + '</button>';
     });
+    html += '</div>';
+  }
+
+  // 레벨 진행률
+  if (targetName) {
+    const lv = getLevelInfo(targetName);
+    html += '<div style="padding:16px;border-radius:16px;background:linear-gradient(135deg,var(--accent),var(--accent) 60%,var(--accent-soft));margin-bottom:18px">';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    html += '<div style="color:#fff;font-size:16px;font-weight:900">Lv.' + lv.level + ' ' + esc(lv.name) + '</div>';
+    html += '<div style="color:rgba(255,255,255,.85);font-size:12px;font-weight:700">누적 ' + lv.totalScore + '점</div>';
+    html += '</div>';
+    html += '<div style="height:8px;background:rgba(255,255,255,.3);border-radius:99px;overflow:hidden;margin-bottom:6px">' +
+      '<div style="height:100%;width:' + lv.pct + '%;background:#fff;border-radius:99px"></div></div>';
+    html += '<div style="color:rgba(255,255,255,.85);font-size:11px;font-weight:700">' + (lv.next ? '다음 레벨까지 ' + lv.pointsToNext + '점 (' + lv.pct + '%)' : '🎉 최고 레벨 달성!') + '</div>';
     html += '</div>';
   }
 
@@ -4033,10 +4048,14 @@ async function endSeason(goalResults = {}) {
     if (seasons[currentSeasonId]) { seasons[currentSeasonId].ended = true; seasons[currentSeasonId].hall = hall; }
   }
 
-  // 평생 배지 - 시즌 참여 카운트 (기록 1건 이상 있으면 참여로 인정)
+  // 평생 배지 - 시즌 참여 카운트 (기록 1건 이상 있으면 참여로 인정) + 레벨 누적 점수 반영
   for (const m of members) {
     const participated = entries.some(e => e.member === m.name);
-    if (participated) await bumpLifetimeStat(m.name, "seasonsCount", 1);
+    if (participated) {
+      await bumpLifetimeStat(m.name, "seasonsCount", 1);
+      const finalScore = calcSeasonScore(m.name).score;
+      if (finalScore !== 0) await bumpLifetimeStat(m.name, "cumulativeScore", finalScore);
+    }
   }
 
   // 시즌 배지를 평생 타이틀로 전환 (영구 보관)
@@ -4297,6 +4316,12 @@ function repBadgeTag(name) {
   return '';
 }
 
+// 레벨 인라인 태그 (이름 옆에 붙이는 용도)
+function levelTag(name) {
+  const lv = getLevelInfo(name);
+  return '<span style="font-size:10px;font-weight:800;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:1px 5px;margin-right:3px" title="' + esc(lv.name) + '">Lv.' + lv.level + '</span> ';
+}
+
 function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
   let html = '<div style="padding-bottom:calc(80px + env(safe-area-inset-bottom))">';
 
@@ -4357,7 +4382,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
           entries.filter(e => e.member === m.name && fmtKey(new Date(e.timestamp)) === todayStr && e.date !== todayStr).map(e => e.date.slice(5).replace('-','/'))
         )];
         html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-size:14px;font-weight:700">✅ ' + repBadgeTag(m.name) + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
+          '<span style="font-size:14px;font-weight:700">✅ ' + levelTag(m.name) + repBadgeTag(m.name) + esc(m.name) + (todayBurned > 0 ? ' 🏃' : '') + (todayKcal > 2000 ? ' 💣' : '') + '</span>' +
           '<div style="text-align:right"><span style="font-size:13px;font-weight:700;color:var(--accent)">' + todayKcal.toLocaleString() + ' kcal</span>' +
           (todayBurned > 0 ? '<br><span style="font-size:11px;font-weight:700;color:#4CAF50">-' + todayBurned.toLocaleString() + ' 운동 → 순 ' + netKcal.toLocaleString() + ' kcal</span>' : '') +
           '</div></div>' +
@@ -4366,7 +4391,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
         const hasAnyRecordEver = entries.some(e => e.member === m.name);
         if (!hasAnyRecordEver) {
           html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-            '<span style="font-size:14px;font-weight:700;color:var(--muted)">🌱 ' + repBadgeTag(m.name) + esc(m.name) + '</span>' +
+            '<span style="font-size:14px;font-weight:700;color:var(--muted)">🌱 ' + levelTag(m.name) + repBadgeTag(m.name) + esc(m.name) + '</span>' +
             '<span style="font-size:12px;font-weight:700;color:var(--faint)">아직 기록이 없어요</span></div>';
         } else {
           let missDay = 1;
@@ -4375,7 +4400,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
           const emoji2 = missDay >= 3 ? '💀' : missDay === 2 ? '🚨' : '😴';
           const msg = missDay >= 3 ? missDay + '일째 다이어트 포기?' : missDay === 2 ? '이틀째 행방불명' : '아직 안 했어요';
           html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-            '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + repBadgeTag(m.name) + esc(m.name) + '</span>' +
+            '<span style="font-size:14px;font-weight:700;color:var(--muted)">' + emoji2 + ' ' + levelTag(m.name) + repBadgeTag(m.name) + esc(m.name) + '</span>' +
             '<span style="font-size:12px;font-weight:700;color:#E0726A">' + msg + '</span></div>';
         }
       }
@@ -4391,7 +4416,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
     members.forEach(m => {
       const pledge = pledges[m.name];
       html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">';
-      html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + repBadgeTag(m.name) + esc(m.name) + '</span>';
+      html += '<span style="font-size:13px;font-weight:700;flex-shrink:0">' + levelTag(m.name) + repBadgeTag(m.name) + esc(m.name) + '</span>';
       html += pledge ? '<span style="font-size:13px;color:var(--ink);flex:1;text-align:right">&quot;' + esc(pledge) + '&quot;</span>' : '<span style="font-size:12px;color:var(--faint);flex:1;text-align:right">아직 없음</span>';
       html += '</div>';
     });
@@ -4413,7 +4438,7 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
       html += '<div style="display:flex;flex-direction:column;gap:8px">';
       streaks.sort((a,b) => b.streak - a.streak).forEach(s => {
         html += '<div style="display:flex;align-items:center;justify-content:space-between">' +
-          '<span style="font-size:14px;font-weight:700">' + repBadgeTag(s.name) + esc(s.name) + '</span>' +
+          '<span style="font-size:14px;font-weight:700">' + levelTag(s.name) + repBadgeTag(s.name) + esc(s.name) + '</span>' +
           '<span style="font-size:14px;font-weight:800;color:var(--accent)">' + streakEmoji(s.streak) + ' ' + s.streak + '일 연속</span>' +
           '</div>';
       });
@@ -4452,12 +4477,12 @@ function renderHomeHtml(dayKey, dayEntries, dayExercises, wr) {
       html += '<div class="sub" style="margin-bottom:10px">🏆 이번 주 MVP</div>';
       html += '<div style="display:flex;align-items:center;gap:12px">';
       html += '<span style="width:42px;height:42px;border-radius:12px;background:' + mc + '22;color:' + mc + ';display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;flex-shrink:0">' + esc(avatarOf(mvp.name)) + '</span>';
-      html += '<div><div style="font-size:16px;font-weight:800">' + repBadgeTag(mvp.name) + esc(mvp.name) + ' 👑</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록</div></div>';
+      html += '<div><div style="font-size:16px;font-weight:800">' + levelTag(mvp.name) + repBadgeTag(mvp.name) + esc(mvp.name) + ' 👑</div><div style="font-size:12px;color:var(--muted);margin-top:2px">' + mvp.score + '점 · ' + mvp.recordDays + '일 기록</div></div>';
       html += '</div>';
       if (mvpData.length > 1) {
         html += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">';
         mvpData.slice(1).forEach((m,i) => {
-          html += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted)">' + (i+2) + '위 ' + repBadgeTag(m.name) + esc(m.name) + '</span><span style="color:var(--muted);font-weight:700">' + m.score + '점</span></div>';
+          html += '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--muted)">' + (i+2) + '위 ' + levelTag(m.name) + repBadgeTag(m.name) + esc(m.name) + '</span><span style="color:var(--muted);font-weight:700">' + m.score + '점</span></div>';
         });
         html += '</div>';
       }
@@ -5376,6 +5401,108 @@ function streakEmoji(n) {
   return '🔥';
 }
 // ⭐ 시즌 다이어트 점수 계산 (MVP 판정에도 동일하게 사용 — 동점 시 순서 편향 방지)
+// ══════════ 레벨 시스템 (역대 모든 시즌 점수 누적) ══════════
+const LEVEL_TABLE = [
+  { level: 1, name: '다이어트 새싹', min: 0 },
+  { level: 2, name: '초보 다이어터', min: 100 },
+  { level: 3, name: '열정 다이어터', min: 250 },
+  { level: 4, name: '성실한 다이어터', min: 450 },
+  { level: 5, name: '다이어트 숙련자', min: 700 },
+  { level: 6, name: '다이어트 고수', min: 1000 },
+  { level: 7, name: '다이어트 마스터', min: 1350 },
+  { level: 8, name: '다이어트 그랜드마스터', min: 1750 },
+  { level: 9, name: '다이어트 레전드', min: 2200 },
+  { level: 10, name: '다이어트의 신', min: 2700 }
+];
+
+function getLevelInfo(name) {
+  const cumulative = ((lifetimeStats[name] || {}).cumulativeScore || 0) + calcSeasonScore(name).score;
+  const totalScore = Math.max(0, cumulative);
+  let current = LEVEL_TABLE[0];
+  let next = LEVEL_TABLE[1] || null;
+  for (let i = 0; i < LEVEL_TABLE.length; i++) {
+    if (totalScore >= LEVEL_TABLE[i].min) {
+      current = LEVEL_TABLE[i];
+      next = LEVEL_TABLE[i + 1] || null;
+    }
+  }
+  const pct = next ? Math.min(100, Math.round((totalScore - current.min) / (next.min - current.min) * 100)) : 100;
+  return { level: current.level, name: current.name, totalScore, next, pct, pointsToNext: next ? next.min - totalScore : 0 };
+}
+
+// calcSeasonScore와 동일한 공식이지만, 전역 상태 대신 넘겨받은 데이터로 계산 (과거 시즌 소급용)
+function calcScoreFromData(name, entriesArr, exercisesArr, warningsObj, thumbsObj) {
+  const mEntries = entriesArr.filter(e => e.member === name);
+  const mExercises = exercisesArr.filter(e => e.member === name);
+  const recordDays = [...new Set(mEntries.map(e => e.date))];
+  const exDays = [...new Set(mExercises.map(e => e.date))];
+  const warningCount = ((warningsObj || {})[name] || {}).count || 0;
+  const thumbCount = ((thumbsObj || {})[name] || {}).count || 0;
+  let score = 0;
+  score += recordDays.length * 10;
+  score += exDays.length * 5;
+  score -= warningCount * 3;
+  score += thumbCount * 3;
+  recordDays.forEach(d => {
+    const dayEntries = mEntries.filter(e => e.date === d);
+    const dayKcal = dayEntries.reduce((s,e) => s + e.calories, 0);
+    if (dayKcal === 0) return;
+    if (dayKcal <= 1500) score += 5;
+    if (dayKcal > 2000) score -= 5;
+    const mealTypes = new Set(dayEntries.map(e => e.mealType));
+    if (mealTypes.has("아침") && mealTypes.has("점심") && mealTypes.has("저녁")) score += 2;
+  });
+  const dateSet = new Set(mEntries.map(e => fmtKey(new Date(e.timestamp))));
+  const sortedDates = [...dateSet].sort();
+  let bestStreakInSeason = 0, cur = 0, prevDate = null;
+  sortedDates.forEach(d => {
+    cur = (prevDate && (new Date(d) - new Date(prevDate)) / 86400000 === 1) ? cur + 1 : 1;
+    bestStreakInSeason = Math.max(bestStreakInSeason, cur);
+    prevDate = d;
+  });
+  if (bestStreakInSeason >= 30) score += 25;
+  return score;
+}
+
+// 이성호 전용: 이미 종료된 모든 시즌의 점수를 다시 계산해서 레벨 누적 점수에 정확히 반영
+async function backfillCumulativeScore() {
+  if (myName !== "이성호") { alert("이성호만 실행할 수 있어요!"); return; }
+  if (!confirm("지금까지 종료된 모든 시즌의 점수를 레벨에 반영할까요?\n(진행 중인 시즌은 실시간으로 따로 더해지니 제외돼요)")) return;
+
+  const seasonIds = ["default", ...Object.keys(seasons || {})];
+  const totals = {};
+
+  for (const sid of seasonIds) {
+    const isEnded = sid === "default" ? defaultSeasonEnded : (seasons[sid] && seasons[sid].ended);
+    if (!isEnded) continue; // 진행 중인 시즌은 제외
+
+    const entriesPath = sid === "default" ? "entries" : "seasons/" + sid + "/entries";
+    const exercisesPath = sid === "default" ? "exercises" : "seasons/" + sid + "/exercises";
+    const warningsPath = sid === "default" ? "warnings" : "seasons/" + sid + "/warnings";
+    const thumbsPath = sid === "default" ? "thumbs" : "seasons/" + sid + "/thumbs";
+    const [e, ex, wn, tb] = await Promise.all([
+      dbGet(entriesPath), dbGet(exercisesPath), dbGet(warningsPath), dbGet(thumbsPath)
+    ]);
+    const eArr = e ? Object.values(e) : [];
+    const exArr = ex ? Object.values(ex) : [];
+
+    for (const m of members) {
+      const score = calcScoreFromData(m.name, eArr, exArr, wn || {}, tb || {});
+      totals[m.name] = (totals[m.name] || 0) + score;
+    }
+  }
+
+  for (const m of members) {
+    const total = totals[m.name] || 0;
+    if (!lifetimeStats[m.name]) lifetimeStats[m.name] = {};
+    lifetimeStats[m.name].cumulativeScore = total;
+    await dbPut("lifetimeStats/" + encodeURIComponent(m.name) + "/cumulativeScore", total);
+  }
+
+  alert("지난 시즌들의 점수를 레벨에 정확히 반영했어요! 🎉");
+  render();
+}
+
 function calcSeasonScore(name) {
   const mEntries = entries.filter(e => e.member === name);
   const mExercises = exercises.filter(e => e.member === name);
@@ -5451,7 +5578,7 @@ function calcStreakAt(memberName, baseDate) {
 }
 
 // 전역 노출 (onclick용)
-Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, recheckHiddenBadges, copyMembersFromPrevious, recalcHallOfFame, setTitleEmojiOverride, openTitleEmojiPicker, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost, submitBoardComment, deleteBoardComment });
+Object.assign(window, { setMode, setView, shiftDay, shiftMonth, openAdd, openMember, openCalendar, closeModal, removeEntry, submitAdd, submitMember, pickMember, calShift, pickDate, gotoToday, saveDbUrl, copyInvite, resetDb, pickMealType, estimateCalories, applyEstimate, estimateFromPhoto, applyPhotoEstimate, toggleEntry, toggleWeekDay, castVote, openNewPoll, submitNewPoll, openAddOption, submitAddOption, deletePoll, openNewNotice, submitNewNotice, deleteNotice, openEditNotice, submitEditNotice, openSeasonMenu, switchSeason, openNewSeason, submitNewSeason, openEditEntry, pickEditMeal, submitEditEntry, submitPledge, deleteMember, saveMeetDate, confirmEndSeason, toggleGoalResult, submitEndSeason, openExercise, submitExercise, removeExercise, openEditExercise, submitEditExercise, openMyProfile, pickGender, submitMyProfile, saveGeminiKeyAndRender, changeGeminiKey, resetAIChat, sendAIMessage, giveWarning, removeWarning, giveThumbs, removeThumb, forceResaveLastWeek, openBadgeCollection, setRepresentativeBadge, recalcLifetimeStats, dedupeLifetimeTitles, recheckHiddenBadges, copyMembersFromPrevious, recalcHallOfFame, setTitleEmojiOverride, openTitleEmojiPicker, backfillCumulativeScore, doLogin, doSignup, doLogout, renderLoginScreen, renderSignupScreen, openNewBoardPost, submitNewBoardPost, deleteBoardPost, submitBoardComment, deleteBoardComment });
 
 // ── 앱 진입점: 로그인 여부에 따라 로그인 화면 or 앱 화면 ──
 let membersPreloaded = false;
